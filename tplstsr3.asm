@@ -112,12 +112,9 @@ exception_stackframe ENDS
 	nodpmi		db "DOS32 not using DPMI. Please run under Windows or install a DPMI host.",13,10
 			db "If a VCPI provider is running, you may need to disable it.",13,10
 			db "In VCPI/raw mode, I can't guarantee continuity of int 31h from DOS32 to PMODE/W.",13,10,"$"
-	tooprivileged	db "DOS32 is using DPMI, but in Ring 0.",13,10
-			db "This means I can't stop Rayman interfering with the Debug Registers.",13,10
-			db "Please use a Ring-3 DPMI host instead.",13,10,"$"
 	dpmiok		db "DPMI available! Preparing to go resident...",13,10,"$"
 	nogphandler	db "Couldn't install General Protection Fault handler.",13,10
-			db "This means I can't stop Rayman interfering with the Debug Registers.",13,10
+			db "This means I can't stop Rayman crashing when it messes with the Debug Registers.",13,10
 			db "Aborting...",13,10,"$"
 	tsrok		db "Service installed - terminating successfully. You can play Rayman now!",13,10,"$"
 	unkver		db 33o,"[35m","PluM says: Unknown Rayman version (see log file). Aborting...",33o,"[37m",13,10,"$"
@@ -126,6 +123,8 @@ exception_stackframe ENDS
 
 	; Rayman version strings
 	ray121us	db "RAYMAN (US) v1.21"
+	ray120de	db "RAYMAN (GERMAN) v1.20"
+	ray112eu	db "RAYMAN (EU) v1.12"
 
 entry:	; Welcome the user, hook int 31h and go resident
 	mov	edx,offset intro
@@ -137,11 +136,6 @@ entry:	; Welcome the user, hook int 31h and go resident
 	cmp	dl,8
 	mov	edx,offset nodpmi
 	jne	failure
-
-	mov	ax,cs
-	test	ax,3
-	mov	edx,offset tooprivileged
-	jz	failure
 
 	mov	edx,offset dpmiok
 	mov	ah,9		; print message - safe to do this under DOS32 (and PMODE/W for that matter!)
@@ -162,7 +156,12 @@ entry:	; Welcome the user, hook int 31h and go resident
 	int	31h
 
 install_gphandler:
-	; Install GP handler to prevent interference with debug registers.
+	mov	ax,cs
+	test	ax,3
+	; No need to catch GP violations in Ring0, since debug registers are fully accessible.
+	jz	noneed_gphandler
+
+	; Install GP handler to prevent crashes due to interference with debug registers.
 	mov	ax,0202h	; get exception handler
 	mov	bl,0Dh		; GP violation
 	int	31h
@@ -175,7 +174,8 @@ install_gphandler:
 	int	31h
 	mov	edx,offset nogphandler
 	jc	failure
-	
+
+noneed_gphandler:
 	mov	ax,0204h	; get interrupt vector
 	mov	bl,31h
 	int	31h
@@ -440,7 +440,7 @@ poketext:
 
 poketext_segpresent:
 	push	es
-	; mov	es,[rayman_cs_asds]
+	mov	es,[rayman_cs_asds]
 	bt	ebx,0			; single byte?
 	jnc	poketext_notbyte
 	xchg	al,[es:edx]
@@ -528,7 +528,21 @@ rayman_vercheck:
 	repe	cmpsb
 	je	setup_ptrs_v121us
 
-	; TODO: Check for other versions
+	; Check for version 1.20 German
+	mov	esi,offset ray120de
+	mov	edi,offset entete_buf
+	mov	ecx,sizeof ray120de
+	repe	cmpsb
+	je	setup_ptrs_v120de
+
+	; Check for version 1.12 Europe
+	mov	esi,offset ray112eu
+	mov	edi,offset entete_buf
+	mov	ecx,sizeof ray112eu
+	repe	cmpsb
+	je	setup_ptrs_v112eu
+
+	; TODO: Check for other versions (maybe)
 	push	edx
 	mov	edx,offset unkver
 	mov	ah,9			; print message - safe to do this under DOS32 (and PMODE/W for that matter!)
@@ -575,7 +589,83 @@ setup_ptrs_v121us:
 	lea	esi,[edi-(79B9Dh-1A8F8h)]
 	mov	[pTrackTabDone],esi	; @ 0x1A8F8 in the text section
 
+	jmp	common_tracktable_setup
+
+setup_ptrs_v120de:
+	mov	edi,[pRM_call_struct]	; @ 0x185EC8
+	lea	esi,[edi-(185EC8h-17090Ch)]
+	mov	[pnum_world],esi	; @ 0x17090C
+	lea	esi,[edi-(185EC8h-17091Ch)]
+	mov	[pnum_level],esi	; @ 0x17091C
+	lea	esi,[edi-(185EC8h-135F0Bh)]
+	mov	[ptrack_table],esi	; @ 0x135F0B
+	lea	esi,[edi-(185EC8h-135F8Ch)]
+	mov	[ptrack_lentable],esi	; @ 0x135F8C
+	lea	esi,[edi-(185EC8h-17F957h)]
+	mov	[prbook_table],esi	; @ 0x17F957
+	lea	esi,[edi-(185EC8h-17FAEBh)]
+	mov	[prbook_lentable],esi	; @ 0x17FAEB
+	lea	esi,[edi-(185EC8h-17FF8Eh)]
+	mov	[prbook_tablefl],esi	; @ 0x17FF8E
+	lea	esi,[edi-(185EC8h-17F951h)]
+	mov	[plowest_atrack],esi	; @ 0x17F951
+	lea	esi,[edi-(185EC8h-17F952h)]
+	mov	[phighest_atrack],esi	; @ 0x17F952
+
+	mov	edi,[pInt31]		; @ 0x880C9
+	lea	esi,[edi-(880C9h-1AED8h)]
+	mov	[pCreditsTrackNo],esi	; @ 0x1AED8
+	lea	esi,[edi-(880C9h-1AF00h)]
+	mov	[pLogoTrackNo],esi	; @ 0x1AF00
+	lea	esi,[edi-(880C9h-1AF80h)]
+	mov	[pMenuTrackNo],esi	; @ 0x1AF80
+	lea	esi,[edi-(880C9h-1AFA8h)]
+	mov	[pGOverTrackNo],esi	; @ 0x1AFA8
+	lea	esi,[edi-(880C9h-28848h)]
+	mov	[pTrackTabDone],esi	; @ 0x28848
+
+	jmp	common_filespoof_setup
+
+setup_ptrs_v112eu:
+	mov	edi,[pRM_call_struct]	; @ 0x185D28
+	lea	esi,[edi-(185D28h-17075Eh)]
+	mov	[pnum_world],esi	; @ 0x17075E
+	lea	esi,[edi-(185D28h-170770h)]
+	mov	[pnum_level],esi	; @ 0x170770
+	lea	esi,[edi-(185D28h-135EF3h)]
+	mov	[ptrack_table],esi	; @ 0x135EF3
+	lea	esi,[edi-(185D28h-135F74h)]
+	mov	[ptrack_lentable],esi	; @ 0x135F74
+	lea	esi,[edi-(185D28h-17F7B7h)]
+	mov	[prbook_table],esi	; @ 0x17F7B7
+	lea	esi,[edi-(185D28h-17F94Bh)]
+	mov	[prbook_lentable],esi	; @ 0x17F94B
+	lea	esi,[edi-(185D28h-17FDEEh)]
+	mov	[prbook_tablefl],esi	; @ 0x17FDEE
+	lea	esi,[edi-(185D28h-17F7B1h)]
+	mov	[plowest_atrack],esi	; @ 0x17F7B1
+	lea	esi,[edi-(185D28h-17F7B2h)]
+	mov	[phighest_atrack],esi	; @ 0x17F7B2
+
+	mov	edi,[pInt31]		; @ 0x872CD
+	lea	esi,[edi-(872CDh-1ADA8h)]
+	mov	[pCreditsTrackNo],esi	; @ 0x1ADA8
+	lea	esi,[edi-(872CDh-1ADD0h)]
+	mov	[pLogoTrackNo],esi	; @ 0x1ADD0
+	lea	esi,[edi-(872CDh-1AE50h)]
+	mov	[pMenuTrackNo],esi	; @ 0x1AE50
+	lea	esi,[edi-(872CDh-1AE78h)]
+	mov	[pGOverTrackNo],esi	; @ 0x1AE78
+	lea	esi,[edi-(872CDh-285C0h)]
+	mov	[pTrackTabDone],esi	; @ 0x285C0
+
+	jmp	common_filespoof_setup
+
 	; TODO: Pointer setup code for other versions
+
+common_filespoof_setup:
+	; TODO: Hook int 21h to pretend certain files exist on CD,
+	; for those versions that look for them
 
 common_tracktable_setup:
 	; Restore registers from before the version check

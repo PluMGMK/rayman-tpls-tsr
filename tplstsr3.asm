@@ -69,6 +69,7 @@ exception_stackframe ENDS
 
 	old_int31	df ?
 	mydatasel	dw ?	; A selector to access our local data
+	old_int21	df ?
 	raymanpsp	dw ?	; Rayman's PSP
 	old_gphandler	df ?
 	callerpsp	dw ?	; our current caller's PSP
@@ -86,18 +87,33 @@ exception_stackframe ENDS
 	pMenuTrackNo	dd ?
 	pGOverTrackNo	dd ?
 	pTrackTabDone	dd ?	; End of the track table population function
+	pDoGrowingPlat	dd ?
+	pMoskitoLock	dd ?	; Where Moskito locks the screen to begin the boss fight
+	pLevelStart1	dd ?	; Corresponds to "Now in level" in Dosbox TPLS
+	pLevelStart2	dd ?
+	pLevelEnd1	dd ?	; Corresponds to "No longer in level" in Dosbox TPLS
+	pLevelEnd2	dd ?
 
 	; Pointers to data in Rayman
 	pRM_call_struct	dd ?
 	pnum_world	dd ?
 	pnum_level	dd ?
 	ptrack_table	dd ?	; Pointer to level track assignment table (static)
-	ptrack_lentable	dd ?
+	ptimeCd		dd ?
+	pcdTime		dd ?	; How long has the track been playing? Set to zero to restart.
 	prbook_table	dd ?	; Pointer to table of Redbook track info (populated @ runtime)
 	prbook_lentable	dd ?
 	prbook_tablefl	dd ?	; Pointer to flag indicating latter table is populated
 	plowest_atrack	dd ?
 	phighest_atrack	dd ?
+	pcd_driveletter dd ?	; Pointer to Rayman's CD-ROM drive letter
+
+	; Track on-the-fly music tampering
+	plen_to_restore	dd ?
+	ptra_to_restore	dd ?
+	len_to_restore	dd ?
+	tra_to_restore	db 0
+	music_dirty	db 0	; Have we messed with the music and need to restart it?
 
 	rayman_banner	db 'R',1Eh,'A',1Eh,'Y',1Eh,'M',1Eh,'A',1Eh,'N',1Eh
 
@@ -125,6 +141,12 @@ exception_stackframe ENDS
 	ray121us	db "RAYMAN (US) v1.21"
 	ray120de	db "RAYMAN (GERMAN) v1.20"
 	ray112eu	db "RAYMAN (EU) v1.12"
+
+	; Files that Rayman may look for on the CD
+	filechecked1	db ":\rayman\rayman.exe",0
+	filechecked2	db ":\config.exe",0
+	; What to open instead
+	filetocheck	db "NUL",0	; can always be opened!
 
 entry:	; Welcome the user, hook int 31h and go resident
 	mov	edx,offset intro
@@ -194,7 +216,7 @@ noneed_gphandler:
 	mov	edx,offset tsrok
 	mov	ah,9		; print message - safe to do this under DOS32 (and PMODE/W for that matter!)
 	int	21h
-	mov	ax,0ee30h
+	mov	ax,0EE30h	; terminate and stay resident (DOS32 call)
 	int	31h
 
 failure:
@@ -203,8 +225,118 @@ failure:
 	mov	ax,4CFFh	; exit with -1 code
 	int	21h
 
-; Resident code:
+; ===== RESIDENT CODE =====
 
+; =====================
+; == INT 21H HANDLER ==
+; =====================
+new_int21:
+	cmp	ah,3Dh		; open
+	je	new_int21_open
+	jmp	cs:old_int21
+
+new_int21_open:
+	push	ebp
+	lea	ebp,[esp+4]	; convenient pointer to stack frame
+	push	ecx
+
+	mov	cx,[cs:rayman_cs]
+	cmp	cx,[ebp+4]
+	je	open_fromrayman
+	
+	pop	ecx
+	pop	ebp
+	jmp	cs:old_int21
+
+open_fromrayman:
+	push	esi
+	push	edi
+
+	mov	esi,edx		; the file path
+	mov	edi,[cs:pcd_driveletter]
+	cmpsb			; is it looking for a file on the CD?
+	je	open_oncd
+
+	pop	edi
+	pop	esi
+	pop	ecx
+	pop	ebp
+	jmp	cs:old_int21
+
+open_oncd:
+	push	es
+	mov	es,[cs:mydatasel]
+
+	push	esi
+	mov	edi,offset filechecked1
+	mov	ecx,sizeof filechecked1
+	repe	cmpsb
+	pop	esi
+	je	open_spooffile
+
+	push	esi
+	mov	edi,offset filechecked2
+	mov	ecx,sizeof filechecked2
+	repe	cmpsb
+	pop	esi
+	je	open_spooffile
+
+	; it's neither of the files to spoof
+	pop	es
+	pop	edi
+	pop	esi
+	pop	ecx
+	pop	ebp
+	jmp	cs:old_int21
+
+open_spooffile:
+	; before spoofing, make sure the CD is actually suitable
+	mov	edi,[es:plowest_atrack]
+	cmp	byte ptr [ds:edi],2
+	ja	cd_ng		; too many data tracks
+
+	mov	edi,[es:phighest_atrack]
+	cmp	byte ptr [ds:edi],51
+	jb	cd_ng		; not enough audio tracks
+
+	push	ds
+	push	edx
+	mov	ds,[es:mydatasel]
+	mov	edx,offset filetocheck
+
+	pushfd
+	call	cs:old_int21
+	; set carry as appropriate in the return flags
+	setc	cl
+	mov	ch,byte ptr [ebp+8]
+	and	ch,0FEh		; clear carry
+	or	ch,cl		; set carry if necessary
+	mov	byte ptr [ebp+8],ch
+
+	; return
+	pop	edx
+	pop	ds
+	pop	es
+	pop	edi
+	pop	esi
+	pop	ecx
+	pop	ebp
+	iretd
+
+cd_ng:
+	mov	ax,3		; pretend path not found
+	or	[ebp+8],1	; set carry
+	; return
+	pop	es
+	pop	edi
+	pop	esi
+	pop	ecx
+	pop	ebp
+	iretd
+
+; =====================
+; == INT 31H HANDLER ==
+; =====================
 new_int31:
 	cmp	ax,0300h
 	je	sim_rm_int
@@ -234,6 +366,8 @@ get_psp:
 	pop	eax
 	ret
 
+; =============================================================================
+; SUBROUTINE to check if we've been called from Rayman('s initialization screen)
 check_is_rayman:
 	; Output: ZF set if called from Rayman, clear otherwise
 	push	es
@@ -273,6 +407,8 @@ raycheck_retpoint:
 	pop	es
 	ret
 
+; ===========
+; SUBROUTINE
 read_entete:
 	; Read the UbiSoft banner at the top of the console,
 	; called the "EnTete" in their code.
@@ -318,6 +454,8 @@ trash:
 	rep	stosd
 	jmp	entete_retpoint
 
+; ============================================================
+; SUBROUTINE to write unknown version information to a logfile
 write_to_logfile:
 	push	eax
 	push	ebx
@@ -401,6 +539,8 @@ logfile_retpoint:
 	pop	eax
 	ret
 
+; ===========
+; SUBROUTINE:
 ; int __fastcall poketext(int data, void *addx, unsigned char size)
 ; Inserts a byte/word/dword (depending on "size") into Rayman's code segment
 ; at the given addx, and returns what was there before.
@@ -458,6 +598,8 @@ poketext_retpoint:
 	pop	es
 	ret
 
+; ===========
+; SUBROUTINE:
 ; int set_breakpoint@<ecx>(void *addx@<edx>)
 ; Sets a breakpoint for *execution* at the given addx in Rayman's *code* segment.
 set_breakpoint:
@@ -473,6 +615,8 @@ set_breakpoint:
 	call	bkpt_activate		; activate the new breakpoint!
 	ret
 
+; ===========
+; SUBROUTINE:
 ; void clear_breakpoint(int idx@<ecx>)
 clear_breakpoint:
 	call	bkpt_deactivate		; first, make sure it's inactive!
@@ -484,6 +628,9 @@ clear_breakpoint:
 	pop	eax
 	ret
 
+; ========================================================
+; == Chunk of INT 31H HANDLER dealing with MSCDEX calls ==
+; ========================================================
 sim_rm_mscdex:
 	push	ds			; this pushes a dword on the stack??
 	mov	ds,[cs:mydatasel]	; our own data are of interest now!
@@ -565,7 +712,9 @@ setup_ptrs_v121us:
 	lea	esi,[edi-(54E38h-4F3Bh)]
 	mov	[ptrack_table],esi	; @ 0x4F3B in the data section
 	lea	esi,[edi-(54E38h-4FBCh)]
-	mov	[ptrack_lentable],esi	; @ 0x4FBC in the data section
+	mov	[ptimeCd],esi		; @ 0x4FBC in the data section
+	lea	esi,[edi-(54E38h-3D85Ch)]
+	mov	[pcdTime],esi		; @ 0x3D85C in the data section
 	lea	esi,[edi-(54E38h-4E8C7h)]
 	mov	[prbook_table],esi	; @ 0x4E8C7 in the data section
 	lea	esi,[edi-(54E38h-4EA5Bh)]
@@ -576,6 +725,8 @@ setup_ptrs_v121us:
 	mov	[plowest_atrack],esi	; @ 0x4E8C1 in the data section
 	lea	esi,[edi-(54E38h-4E8C1h)]
 	mov	[phighest_atrack],esi	; @ 0x4E8C2 in the data section
+	lea	esi,[edi-(54E38h-3FA27h)]
+	mov	[pcd_driveletter],esi	; @ 0x3FA27 in the data section
 
 	mov	edi,[pInt31]		; @ 0x79B9D in the text section
 	lea	esi,[edi-(79B9Dh-0CF48h)]
@@ -588,19 +739,33 @@ setup_ptrs_v121us:
 	mov	[pGOverTrackNo],esi	; @ 0xD018 in the text section
 	lea	esi,[edi-(79B9Dh-1A8F8h)]
 	mov	[pTrackTabDone],esi	; @ 0x1A8F8 in the text section
+	lea	esi,[edi-(79B9Dh-6B1A0h)]
+	mov	[pDoGrowingPlat],esi	; @ 0x6B1A0 in the text section
+	lea	esi,[edi-(79B9Dh-43D35h)]
+	mov	[pMoskitoLock],esi	; @ 0x43D35 in the text section
+	lea	esi,[edi-(79B9Dh-70F0h)]
+	mov	[pLevelStart1],esi	; @ 0x70F0 in the text section
+	lea	esi,[edi-(79B9Dh-77F6h)]
+	mov	[pLevelStart2],esi	; @ 0x77F6 in the text section
+	lea	esi,[edi-(79B9Dh-7697h)]
+	mov	[pLevelEnd1],esi	; @ 0x7697 in the text section
+	lea	esi,[edi-(79B9Dh-7CA6h)]
+	mov	[pLevelEnd2],esi	; @ 0x7CA6 in the text section
 
 	jmp	common_tracktable_setup
 
 setup_ptrs_v120de:
 	mov	edi,[pRM_call_struct]	; @ 0x185EC8
-	lea	esi,[edi-(185EC8h-17090Ch)]
-	mov	[pnum_world],esi	; @ 0x17090C
 	lea	esi,[edi-(185EC8h-17091Ch)]
-	mov	[pnum_level],esi	; @ 0x17091C
+	mov	[pnum_world],esi	; @ 0x17091C
+	lea	esi,[edi-(185EC8h-17090Ch)]
+	mov	[pnum_level],esi	; @ 0x17090C
 	lea	esi,[edi-(185EC8h-135F0Bh)]
 	mov	[ptrack_table],esi	; @ 0x135F0B
 	lea	esi,[edi-(185EC8h-135F8Ch)]
-	mov	[ptrack_lentable],esi	; @ 0x135F8C
+	mov	[ptimeCd],esi		; @ 0x135F8C
+	lea	esi,[edi-(185EC8h-16E8ECh)]
+	mov	[pcdTime],esi		; @ 0x16E8EC
 	lea	esi,[edi-(185EC8h-17F957h)]
 	mov	[prbook_table],esi	; @ 0x17F957
 	lea	esi,[edi-(185EC8h-17FAEBh)]
@@ -611,6 +776,8 @@ setup_ptrs_v120de:
 	mov	[plowest_atrack],esi	; @ 0x17F951
 	lea	esi,[edi-(185EC8h-17F952h)]
 	mov	[phighest_atrack],esi	; @ 0x17F952
+	lea	esi,[edi-(185EC8h-170AB7h)]
+	mov	[pcd_driveletter],esi	; @ 0x170AB7
 
 	mov	edi,[pInt31]		; @ 0x880C9
 	lea	esi,[edi-(880C9h-1AED8h)]
@@ -623,6 +790,18 @@ setup_ptrs_v120de:
 	mov	[pGOverTrackNo],esi	; @ 0x1AFA8
 	lea	esi,[edi-(880C9h-28848h)]
 	mov	[pTrackTabDone],esi	; @ 0x28848
+	lea	esi,[edi-(880C9h-79650h)]
+	mov	[pDoGrowingPlat],esi	; @ 0x79650
+	lea	esi,[edi-(880C9h-51D45h)]
+	mov	[pMoskitoLock],esi	; @ 0x51D45
+	lea	esi,[edi-(880C9h-14FF0h)]
+	mov	[pLevelStart1],esi	; @ 0x14FF0
+	lea	esi,[edi-(880C9h-156F6h)]
+	mov	[pLevelStart2],esi	; @ 0x156F6
+	lea	esi,[edi-(880C9h-15597h)]
+	mov	[pLevelEnd1],esi	; @ 0x15597
+	lea	esi,[edi-(880C9h-15BA6h)]
+	mov	[pLevelEnd2],esi	; @ 0x15BA6
 
 	jmp	common_filespoof_setup
 
@@ -635,7 +814,9 @@ setup_ptrs_v112eu:
 	lea	esi,[edi-(185D28h-135EF3h)]
 	mov	[ptrack_table],esi	; @ 0x135EF3
 	lea	esi,[edi-(185D28h-135F74h)]
-	mov	[ptrack_lentable],esi	; @ 0x135F74
+	mov	[ptimeCd],esi		; @ 0x135F74
+	lea	esi,[edi-(185D28h-16E744h)]
+	mov	[pcdTime],esi		; @ 0x16E744
 	lea	esi,[edi-(185D28h-17F7B7h)]
 	mov	[prbook_table],esi	; @ 0x17F7B7
 	lea	esi,[edi-(185D28h-17F94Bh)]
@@ -646,6 +827,8 @@ setup_ptrs_v112eu:
 	mov	[plowest_atrack],esi	; @ 0x17F7B1
 	lea	esi,[edi-(185D28h-17F7B2h)]
 	mov	[phighest_atrack],esi	; @ 0x17F7B2
+	lea	esi,[edi-(185D28h-17090Bh)]
+	mov	[pcd_driveletter],esi	; @ 0x17090B
 
 	mov	edi,[pInt31]		; @ 0x872CD
 	lea	esi,[edi-(872CDh-1ADA8h)]
@@ -658,14 +841,40 @@ setup_ptrs_v112eu:
 	mov	[pGOverTrackNo],esi	; @ 0x1AE78
 	lea	esi,[edi-(872CDh-285C0h)]
 	mov	[pTrackTabDone],esi	; @ 0x285C0
+	lea	esi,[edi-(872CDh-789E0h)]
+	mov	[pDoGrowingPlat],esi	; @ 0x789E0
+	lea	esi,[edi-(872CDh-51105h)]
+	mov	[pMoskitoLock],esi	; @ 0x51105
+	lea	esi,[edi-(872CDh-14FE0h)]
+	mov	[pLevelStart1],esi	; @ 0x14FE0
+	lea	esi,[edi-(872CDh-156E6h)]
+	mov	[pLevelStart2],esi	; @ 0x156E6
+	lea	esi,[edi-(872CDh-15587h)]
+	mov	[pLevelEnd1],esi	; @ 0x15587
+	lea	esi,[edi-(872CDh-15B96h)]
+	mov	[pLevelEnd2],esi	; @ 0x15B96
 
 	jmp	common_filespoof_setup
 
 	; TODO: Pointer setup code for other versions
 
 common_filespoof_setup:
-	; TODO: Hook int 21h to pretend certain files exist on CD,
-	; for those versions that look for them
+	push	eax
+	push	ebx
+	push	edx
+	mov	ax,0204h	; get interrupt vector
+	mov	bl,21h
+	int	31h
+	mov	dword ptr [old_int21],edx
+	mov	word ptr [old_int21+4],cx
+
+	inc	ax		; set interrupt vector
+	mov	cx,cs
+	mov	edx,offset new_int21
+	int	31h
+	pop	edx
+	pop	ebx
+	pop	eax
 
 common_tracktable_setup:
 	; Restore registers from before the version check
@@ -679,8 +888,6 @@ common_tracktable_setup:
 
 	; JUNGLE
 	inc	edi			; skip level 0, which doesn't exist
-	; For now, assume no data track.
-	; This will be fixed up when the game populates its Redbook track table
 	mov	al,3			; First Steps
 	stosb
 	mov	al,8			; Lost in the Woods
@@ -879,11 +1086,27 @@ common_tracktable_setup:
 
 	; Now set a breakpoint so we can fill in the lengths of these tracks
 	; once the game has read them from the CD!
-	mov	edx,[pTrackTabDone]
 	push	ecx
+	mov	edx,[pTrackTabDone]
 	call	set_breakpoint
 
-	pop	ecx			; we don't need the BP's idx for now...
+	; General breakpoints
+	mov	edx,[pLevelStart1]
+	call	set_breakpoint
+	mov	edx,[pLevelStart2]
+	call	set_breakpoint
+	mov	edx,[pLevelEnd1]
+	call	set_breakpoint
+	mov	edx,[pLevelEnd2]
+	call	set_breakpoint
+
+	; Breakpoints to react to things in the game
+	mov	edx,[pDoGrowingPlat]
+	call	set_breakpoint
+	mov	edx,[pMoskitoLock]
+	call	set_breakpoint
+
+	pop	ecx			; we don't need the breakpoints' indices for now...
 	pop	ebx
 	pop	edx
 	pop	eax
@@ -891,12 +1114,34 @@ common_tracktable_setup:
 	jmp	passthrough
 
 skipinstcheck:
-	; TODO:
-	; - Reactivate inactive breakpoints 
-	; - Set breakpoints for things like:
-	;  - The mosquito's attack in Anguish Lagoon
-	;  - Planting a seed in the Swamps
-	;  - etc...
+	; Reactivate all breakpoints.
+	; NB: Because this happens here, we need to make sure int 2Fh
+	; never gets called from within the breakpoint handler!
+	push	ecx
+	push	eax
+	push	es
+	push	edi
+	mov	di,ds
+	mov	es,di
+
+	mov	edi,(offset bkpt_origcode)-4
+	mov	ecx,NUM_BKPTS
+	std
+	xor	eax,eax
+bkpt_reac_loop:
+	scasd				; check if there is a breakpoint with this idx
+	loope	bkpt_reac_loop		; this decrements ECX!
+	je	bkpt_reac_done		; if ECX and [ES:EDI] are both zero, we're finished
+	call	bkpt_activate		; the loope instruction has made this the right idx for here...
+	inc	ecx			; cancel the effect of the loope instruction before next iteration
+	loop	bkpt_reac_loop
+bkpt_reac_done:
+	cld
+
+	pop	edi
+	pop	es
+	pop	eax
+	pop	ecx
 
 passthrough:
 	pushfd				; Bloody UASM generates 16-bit instructions if I don't include the 'd'!
@@ -905,6 +1150,8 @@ mscdex_retpoint:
 	pop	ds
 	iretd				; Bloody UASM generates 16-bit instructions if I don't include the 'd'!
 
+; ===========
+; SUBROUTINE:
 ; bool bkpt_active(int idx@<ecx>);
 ; ZF clear if breakpoint is active, set if inactive
 bkpt_active:
@@ -914,6 +1161,8 @@ bkpt_active:
 	pop	edx
 	ret
 
+; ===========
+; SUBROUTINE:
 ; int bkpt_find@<ecx>(void *addx@<eax>);
 ; Finds and returns the index of the *last* breakpoint in the list
 ; corresponding to the given addx.
@@ -938,6 +1187,8 @@ bkpt_found:
 	pop	es
 	ret
 
+; ===========
+; SUBROUTINE:
 ; ushort bkpt_swapcode@<eax>(int idx@<ecx>);
 ; Swaps the word at the idx-th breakpoint in the text section
 ; with the word stored in the table
@@ -960,6 +1211,8 @@ bkpt_swapcode:
 	pop	ebx
 	ret
 
+; ===========
+; SUBROUTINE:
 ; void bkpt_activate(int idx@<ecx>);
 ; Activates the idx-th breakpoint if it's inactive.
 bkpt_activate:
@@ -971,6 +1224,8 @@ bkpt_activate:
 bkpt_activate_retp:
 	ret
 
+; ===========
+; SUBROUTINE:
 ; void bkpt_deactivate(int idx@<ecx>);
 ; Dectivates the idx-th breakpoint if it's active.
 bkpt_deactivate:
@@ -981,7 +1236,64 @@ bkpt_deactivate:
 	pop	eax
 	ret
 
-; Handler for our *custom* breakpoint mechanism on int F5
+; ===========
+; SUBROUTINE:
+; void __fastcall change_music(char newtrack);
+; Changes the music track (and corresponding length) for the current level and plays
+change_music:
+	push	edx
+	push	ecx
+	push	ebx
+
+	mov	ecx,[pnum_world]
+	mov	edx,[pnum_level]
+	movzx	ecx,word ptr [es:ecx]
+	dec	ecx
+
+	mov	ebx,ecx
+	shl	ebx,4			; EBX = (num_world - 1) * 16
+	lea	ebx,[ebx+ecx*4]		; EBX = (num_world - 1) * 20
+	lea	ebx,[ebx+ecx*2]		; EBX = (num_world - 1) * 22
+	add	bx,[es:edx]		; EBX = (num_world - 1) * 22 + num_level
+
+	mov	edx,[ptrack_table]
+	mov	cl,al
+	lea	edx,[edx+ebx]
+	xchg	[es:edx],cl
+	mov	[tra_to_restore],cl
+	mov	[ptra_to_restore],edx
+
+	movzx	ecx,al
+	shl	ecx,2
+	add	ecx,[prbook_lentable]
+	push	eax
+	mov	eax,[es:ecx]		; get the length of this track in sectors
+	mov	ecx,75
+	xor	edx,edx
+	add	eax,74			; round up
+	div	ecx			; convert sectors to seconds by dividing by 75
+
+	mov	edx,[ptimeCd]
+	mov	ecx,eax
+	lea	edx,[edx+ebx*4]
+	xchg	[es:edx],ecx
+	mov	[len_to_restore],ecx
+	mov	[plen_to_restore],edx
+
+	; restart the CD music
+	xor	ecx,ecx
+	mov	eax,[pcdTime]
+	mov	[es:eax],ecx
+
+	pop	eax
+	pop	ebx
+	pop	ecx
+	pop	edx
+	ret
+
+; =============================================================
+; == HANDLER for our *custom* breakpoint mechanism on int F5 ==
+; =============================================================
 bkpt_handler:
 	sub	dword ptr [esp],2	; rewind to before the int 0F5h instruction
 	push	ebp
@@ -997,8 +1309,23 @@ bkpt_handler:
 
 	cmp	eax,[pTrackTabDone]
 	je	rbook_table_populated
-	; Dunno what breakpoint that was then...
 
+	cmp	eax,[pLevelStart1]
+	je	now_in_level
+	cmp	eax,[pLevelStart2]
+	je	now_in_level
+
+	cmp	eax,[pLevelEnd1]
+	je	no_longer_in_level
+	cmp	eax,[pLevelEnd2]
+	je	no_longer_in_level
+
+	cmp	eax,[pDoGrowingPlat]
+	je	plant_growing
+	cmp	eax,[pMoskitoLock]
+	je	moskito_fight
+
+	; Dunno what breakpoint that was then...
 bkpt_retpoint:
 	pop	ecx
 	pop	eax
@@ -1018,7 +1345,7 @@ rbook_table_populated:
 	push	ebx
 
 	mov	esi,[ptrack_table]
-	mov	edi,[ptrack_lentable]
+	mov	edi,[ptimeCd]
 	mov	edx,[prbook_lentable]
 	mov	ecx,129			; length of the track table (for some reason)
 	mov	ebx,[plowest_atrack]
@@ -1055,7 +1382,63 @@ tracklen_loop:
 	pop	esi
 	jmp	bkpt_retpoint
 
-; General Protection Fault handler. Prevent interference with Debug Registers.
+; Entering a level - restart the music if it's been tampered with...
+now_in_level:
+	xor	ecx,ecx
+	cmp	[music_dirty],cl
+	jz	bkpt_retpoint
+
+	; It's been tampered with - reset
+	mov	eax,[pcdTime]
+	mov	[es:eax],ecx
+	mov	[music_dirty],cl
+	jmp	bkpt_retpoint
+
+; Leaving a level - restore the default music track if needed, and mark as dirty.
+no_longer_in_level:
+	xor	ecx,ecx
+	cmp	[tra_to_restore],cl
+	jz	bkpt_retpoint
+
+	; It's been tampered with - reset
+	xchg	[tra_to_restore],cl
+	mov	eax,[ptra_to_restore]
+	mov	[es:eax],cl		; restore the default track number
+
+	mov	ecx,[len_to_restore]
+	mov	eax,[plen_to_restore]
+	mov	[es:eax],ecx		; restore the default track length
+
+	mov	[music_dirty],1		; set dirty flag so the restored track will play
+	jmp	bkpt_retpoint
+
+; Rayman's planted a seed - we should switch the music to Suspense if it's not already.
+; No need to check the world/level, since there's only one level in the whole game where this happens...
+plant_growing:
+	xor	ecx,ecx
+	cmp	[tra_to_restore],cl
+	jnz	bkpt_retpoint		; music already changed
+
+	mov	al,10			; Suspense - The Flood
+	call	change_music
+	jmp	bkpt_retpoint
+
+; A mosquito fight is about to begin so the screen has been locked
+moskito_fight:
+	mov	ecx,[pnum_level]
+	cmp	word ptr [ecx],6
+	jne	bkpt_retpoint		; it's not Anguish Lagoon
+
+	xor	ecx,ecx
+	cmp	[tra_to_restore],cl
+	jnz	bkpt_retpoint		; music already changed
+
+	mov	al,7			; Bzzit Attacks
+	call	change_music
+	jmp	bkpt_retpoint
+
+; == GP VIOLATION HANDLER ==
+; Prevent interference with Debug Registers.
 ; (And hence crashes when using more conservative DPMI hosts!)
 gp_handler:
 	push	ebp

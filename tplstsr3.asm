@@ -89,10 +89,15 @@ exception_stackframe ENDS
 	pTrackTabDone	dd ?	; End of the track table population function
 	pDoGrowingPlat	dd ?
 	pMoskitoLock	dd ?	; Where Moskito locks the screen to begin the boss fight
+	pMoskitoFast	dd ?	; Rayman's riding on a mosquito that starts moving fast
+	pMoskitoSlow	dd ?	; Rayman's riding on a mosquito that stops moving fast
 	pLevelStart1	dd ?	; Corresponds to "Now in level" in Dosbox TPLS
 	pLevelStart2	dd ?
 	pLevelEnd1	dd ?	; Corresponds to "No longer in level" in Dosbox TPLS
 	pLevelEnd2	dd ?
+	pExitSign1	dd ?	; Rayman reaches an exit sign, so a fanfare should play
+	pExitSign2	dd ?
+	pPlayTrack	dd ?	; Function in Rayman's code for playing a numbered CD audio track
 
 	; Pointers to data in Rayman
 	pRM_call_struct	dd ?
@@ -743,6 +748,10 @@ setup_ptrs_v121us:
 	mov	[pDoGrowingPlat],esi	; @ 0x6B1A0 in the text section
 	lea	esi,[edi-(79B9Dh-43D35h)]
 	mov	[pMoskitoLock],esi	; @ 0x43D35 in the text section
+	lea	esi,[edi-(79B9Dh-4AE94h)]
+	mov	[pMoskitoFast],esi	; @ 0x4AE94 in the text section
+	lea	esi,[edi-(79B9Dh-4AEBDh)]
+	mov	[pMoskitoSlow],esi	; @ 0x4AEBD in the text section
 	lea	esi,[edi-(79B9Dh-70F0h)]
 	mov	[pLevelStart1],esi	; @ 0x70F0 in the text section
 	lea	esi,[edi-(79B9Dh-77F6h)]
@@ -751,6 +760,12 @@ setup_ptrs_v121us:
 	mov	[pLevelEnd1],esi	; @ 0x7697 in the text section
 	lea	esi,[edi-(79B9Dh-7CA6h)]
 	mov	[pLevelEnd2],esi	; @ 0x7CA6 in the text section
+	lea	esi,[edi-(79B9Dh-5234Fh)]
+	mov	[pExitSign1],esi	; @ 0x5234F in the text section
+	lea	esi,[edi-(79B9Dh-524ACh)]
+	mov	[pExitSign2],esi	; @ 0x524AC in the text section
+	lea	esi,[edi-(79B9Dh-1A710h)]
+	mov	[pPlayTrack],esi	; @ 0x1A710 in the text section
 
 	jmp	common_tracktable_setup
 
@@ -794,6 +809,10 @@ setup_ptrs_v120de:
 	mov	[pDoGrowingPlat],esi	; @ 0x79650
 	lea	esi,[edi-(880C9h-51D45h)]
 	mov	[pMoskitoLock],esi	; @ 0x51D45
+	lea	esi,[edi-(880C9h-58EA4h)]
+	mov	[pMoskitoFast],esi	; @ 0x58EA4
+	lea	esi,[edi-(880C9h-58ECDh)]
+	mov	[pMoskitoSlow],esi	; @ 0x58ECD
 	lea	esi,[edi-(880C9h-14FF0h)]
 	mov	[pLevelStart1],esi	; @ 0x14FF0
 	lea	esi,[edi-(880C9h-156F6h)]
@@ -802,6 +821,12 @@ setup_ptrs_v120de:
 	mov	[pLevelEnd1],esi	; @ 0x15597
 	lea	esi,[edi-(880C9h-15BA6h)]
 	mov	[pLevelEnd2],esi	; @ 0x15BA6
+	lea	esi,[edi-(880C9h-6035Fh)]
+	mov	[pExitSign1],esi	; @ 0x6035F
+	lea	esi,[edi-(880C9h-604BCh)]
+	mov	[pExitSign2],esi	; @ 0x604BC
+	lea	esi,[edi-(880C9h-28660h)]
+	mov	[pPlayTrack],esi	; @ 0x28660
 
 	jmp	common_filespoof_setup
 
@@ -845,6 +870,10 @@ setup_ptrs_v112eu:
 	mov	[pDoGrowingPlat],esi	; @ 0x789E0
 	lea	esi,[edi-(872CDh-51105h)]
 	mov	[pMoskitoLock],esi	; @ 0x51105
+	lea	esi,[edi-(872CDh-58264h)]
+	mov	[pMoskitoFast],esi	; @ 0x58264
+	lea	esi,[edi-(872CDh-5828Dh)]
+	mov	[pMoskitoSlow],esi	; @ 0x5828D
 	lea	esi,[edi-(872CDh-14FE0h)]
 	mov	[pLevelStart1],esi	; @ 0x14FE0
 	lea	esi,[edi-(872CDh-156E6h)]
@@ -853,6 +882,12 @@ setup_ptrs_v112eu:
 	mov	[pLevelEnd1],esi	; @ 0x15587
 	lea	esi,[edi-(872CDh-15B96h)]
 	mov	[pLevelEnd2],esi	; @ 0x15B96
+	lea	esi,[edi-(872CDh-5F71Fh)]
+	mov	[pExitSign1],esi	; @ 0x5F71F
+	lea	esi,[edi-(872CDh-5F87Ch)]
+	mov	[pExitSign2],esi	; @ 0x5F87C
+	lea	esi,[edi-(872CDh-283D8h)]
+	mov	[pPlayTrack],esi	; @ 0x283D8
 
 	jmp	common_filespoof_setup
 
@@ -1105,6 +1140,17 @@ common_tracktable_setup:
 	call	set_breakpoint
 	mov	edx,[pMoskitoLock]
 	call	set_breakpoint
+	mov	edx,[pMoskitoFast]
+	call	set_breakpoint
+	mov	edx,[pMoskitoSlow]
+	call	set_breakpoint
+
+	; Breakpoints to make the PC version use CD audio where it normally doesn't
+	; (but other versions normally do)
+	mov	edx,[pExitSign1]
+	call	set_breakpoint
+	mov	edx,[pExitSign2]
+	call	set_breakpoint
 
 	pop	ecx			; we don't need the breakpoints' indices for now...
 	pop	ebx
@@ -1324,6 +1370,15 @@ bkpt_handler:
 	je	plant_growing
 	cmp	eax,[pMoskitoLock]
 	je	moskito_fight
+	cmp	eax,[pMoskitoFast]
+	je	moskito_ride_speedup
+	cmp	eax,[pMoskitoSlow]
+	je	no_longer_in_level	; restore default music
+
+	cmp	eax,[pExitSign1]
+	je	yay_fanfare
+	cmp	eax,[pExitSign2]
+	je	yay_fanfare
 
 	; Dunno what breakpoint that was then...
 bkpt_retpoint:
@@ -1401,6 +1456,18 @@ no_longer_in_level:
 	jz	bkpt_retpoint
 
 	; It's been tampered with - reset
+	cmp	eax,[pMoskitoSlow]
+	jne	delayed_reset
+
+	; Immediately set cdTime to zero to signal the game to play the restored track
+	mov	eax,[pcdTime]
+	mov	[es:eax],ecx
+	jmp	reset_decided
+
+delayed_reset:
+	mov	[music_dirty],1		; set dirty flag so the restored track will play on level reentry
+
+reset_decided:
 	xchg	[tra_to_restore],cl
 	mov	eax,[ptra_to_restore]
 	mov	[es:eax],cl		; restore the default track number
@@ -1409,7 +1476,6 @@ no_longer_in_level:
 	mov	eax,[plen_to_restore]
 	mov	[es:eax],ecx		; restore the default track length
 
-	mov	[music_dirty],1		; set dirty flag so the restored track will play
 	jmp	bkpt_retpoint
 
 ; Rayman's planted a seed - we should switch the music to Suspense if it's not already.
@@ -1426,7 +1492,7 @@ plant_growing:
 ; A mosquito fight is about to begin so the screen has been locked
 moskito_fight:
 	mov	ecx,[pnum_level]
-	cmp	word ptr [ecx],6
+	cmp	word ptr [es:ecx],6
 	jne	bkpt_retpoint		; it's not Anguish Lagoon
 
 	xor	ecx,ecx
@@ -1435,6 +1501,56 @@ moskito_fight:
 
 	mov	al,7			; Bzzit Attacks
 	call	change_music
+	jmp	bkpt_retpoint
+
+; Rayman's riding a mosquito, who has just started going really fast - switch the music to "Hold on Tight!" if it's not already.
+; No need to check the world/level, since there's only one level in the whole game where this happens...
+moskito_ride_speedup:
+	xor	ecx,ecx
+	cmp	[tra_to_restore],cl
+	jnz	bkpt_retpoint		; music already changed
+
+	mov	al,6			; Hold on Tight!
+	call	change_music
+	jmp	bkpt_retpoint
+
+; Rayman's reached the exit sign! Play a CD audio track to celebrate, like the PS1 and Saturn versions.
+; TODO: Do we really want this? It's a nice idea in principle, but the game seems to stop the audio 
+; before it has a chance to finish... We could probably do more hooks to stop that...
+yay_fanfare:
+	; Check whether we're returning to the same or lower privilege level
+	mov	ax,cs
+	mov	cx,[ebp+4]
+	arpl	ax,cx
+
+	; Before we diverge our paths, save a new return address in ECX.
+	; These "exit sign" breakpoints occur at a call (5bytes) to a null sub, which can be skipped over.
+	mov	ecx,[ebp]
+	lea	ecx,[ecx+5]
+
+	; We actually want to return directly to Rayman's function to play a CD audio track,
+	; and invoke it with track 29 (Rayman's victory fanfare).
+	mov	eax,[pPlayTrack]
+	mov	[ebp],eax
+	mov	eax,29			; Yeah!
+	jz	fanfare_privileged	; ZF set/cleared by ARPL above
+
+	; OK, Rayman's at the same privilege level as us, so there's only one stack to worry about
+	mov	[ebp+8],ecx		; replace EFLAGS with new return address - now this is a RETF frame instead of IRET!
+	pop	ecx
+	add	esp,4			; skip EAX on the stack (it's set to our track number!)
+	pop	ds
+	pop	ebp
+	retf
+
+fanfare_privileged:
+	; Returning to an outer privilege level, which means we're on a different stack.
+	sub	[ebp+0Ch],4		; create a RETN frame on user-mode stack (user SS:ESP are at SS:EBP+0Ch)
+	lds	ebp,[ebp+0Ch]
+	mov	[ds:ebp],ecx		; put our new return address into this new stack frame
+
+	; Now return by the usual route, but make sure EAX is set to our track number
+	mov	[esp+4],eax
 	jmp	bkpt_retpoint
 
 ; == GP VIOLATION HANDLER ==

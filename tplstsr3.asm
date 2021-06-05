@@ -131,7 +131,7 @@ exception_stackframe ENDS
 	intro		db "Welcome to ",33o,"[35mP",33o,"[95ml",33o,"[35mu",33o,"[95mM",33o,"[35m'",33o,"[95ms",33o,"[37m TPLS TSR!",13,10,13,10
 			db "Checking for DPMI...",13,10,"$"
 	nodpmi		db "DOS32 not using DPMI. Please run under Windows or install a DPMI host.",13,10
-			db "If a VCPI provider is running, you may need to disable it.",13,10
+			db "If a VCPI provider is running, you need to use TPLSWRAP.EXE.",13,10
 			db "In VCPI/raw mode, I can't guarantee continuity of int 31h from DOS32 to PMODE/W.",13,10,"$"
 	dpmiok		db "DPMI available! Preparing to go resident...",13,10,"$"
 	nogphandler	db "Couldn't install General Protection Fault handler.",13,10
@@ -1545,7 +1545,7 @@ yay_fanfare:
 
 fanfare_privileged:
 	; Returning to an outer privilege level, which means we're on a different stack.
-	sub	[ebp+0Ch],4		; create a RETN frame on user-mode stack (user SS:ESP are at SS:EBP+0Ch)
+	sub	dword ptr [ebp+0Ch],4	; create a RETN frame on user-mode stack (user SS:ESP are at SS:EBP+0Ch)
 	lds	ebp,[ebp+0Ch]
 	mov	[ds:ebp],ecx		; put our new return address into this new stack frame
 

@@ -86,6 +86,10 @@ exception_stackframe ENDS
 	pLogoTrackNo	dd ?
 	pMenuTrackNo	dd ?
 	pGOverTrackNo	dd ?
+	pIntroTrackNo	dd 0	; For multi-lang versions, intro/outtro track number is a
+	pOuttroTrackNo	dd 0	;  fixed offset of the language ID - edit this fixed offset
+	pPlayIntro	dd 0	; For single-lang versions, intro/outtro track number is fixed,
+	pPlayOuttro	dd 0	;  so we inject our own code to calculate from the lang value
 	pTrackTabDone	dd ?	; End of the track table population function
 	pDoGrowingPlat	dd ?
 	pMoskitoLock	dd ?	; Where Moskito locks the screen to begin the boss fight
@@ -97,6 +101,7 @@ exception_stackframe ENDS
 	pLevelEnd2	dd ?
 	pExitSign1	dd ?	; Rayman reaches an exit sign, so a fanfare should play
 	pExitSign2	dd ?
+	pPerdu		dd ?	; Rayman is dead, so his death track should play
 	pPlayTrack	dd ?	; Function in Rayman's code for playing a numbered CD audio track
 
 	; Pointers to data in Rayman
@@ -112,6 +117,7 @@ exception_stackframe ENDS
 	plowest_atrack	dd ?
 	phighest_atrack	dd ?
 	pcd_driveletter dd ?	; Pointer to Rayman's CD-ROM drive letter
+	plang		dd ?
 
 	; Track on-the-fly music tampering
 	plen_to_restore	dd ?
@@ -130,9 +136,9 @@ exception_stackframe ENDS
 	; DOS strings
 	intro		db "Welcome to ",33o,"[35mP",33o,"[95ml",33o,"[35mu",33o,"[95mM",33o,"[35m'",33o,"[95ms",33o,"[37m TPLS TSR!",13,10,13,10
 			db "Checking for DPMI...",13,10,"$"
-	nodpmi		db "DOS32 not using DPMI. Please run under Windows or install a DPMI host.",13,10
-			db "If a VCPI provider is running, you need to use TPLSWRAP.EXE.",13,10
-			db "In VCPI/raw mode, I can't guarantee continuity of int 31h from DOS32 to PMODE/W.",13,10,"$"
+	NODPMI_EXPLAIN	equ "In VCPI/raw mode, I can't guarantee continuity of int 31h from DOS32 to PMODE/W.",13,10,"$"
+	nodpmi		db "DOS32 not using DPMI. Please run under Windows or install a DPMI host.",13,10,NODPMI_EXPLAIN
+	vcpimode	db "DOS32 using VCPI. Please use TPLSWRAP.EXE to make it use DPMI instead.",13,10,NODPMI_EXPLAIN
 	dpmiok		db "DPMI available! Preparing to go resident...",13,10,"$"
 	nogphandler	db "Couldn't install General Protection Fault handler.",13,10
 			db "This means I can't stop Rayman crashing when it messes with the Debug Registers.",13,10
@@ -140,6 +146,8 @@ exception_stackframe ENDS
 	tsrok		db "Service installed - terminating successfully. You can play Rayman now!",13,10,"$"
 	unkver		db 33o,"[35m","PluM says: Unknown Rayman version (see log file). Aborting...",33o,"[37m",13,10,"$"
 	bkpterr		db 33o,"[35m","PluM couldn't install their breakpoint handler. Aborting...",33o,"[37m",13,10,"$"
+	noextratracks	db 33o,"[35m","Warning: You are not using a custom CD image with intro/outtro tracks.",13,10
+			db 	"Intro and/or outtro cutscenes may be silent!",33o,"[37m",13,10,"$"
 	unhandled_gp	db 33o,"[35m","It's dead Jim. X(",33o,"[37m",13,10,"$"
 
 	; Rayman version strings
@@ -160,7 +168,12 @@ entry:	; Welcome the user, hook int 31h and go resident
 
 	mov	ax,0EE00h	; check DOS32 version
 	int	31h
-	cmp	dl,8
+	mov	ah,dl
+	cmp	ah,4
+	mov	edx,offset vcpimode
+	je	failure
+
+	cmp	ah,8
 	mov	edx,offset nodpmi
 	jne	failure
 
@@ -304,11 +317,22 @@ open_spooffile:
 	cmp	byte ptr [ds:edi],51
 	jb	cd_ng		; not enough audio tracks
 
+	cmp	byte ptr [ds:edi],57
 	push	ds
 	push	edx
 	mov	ds,[es:mydatasel]
-	mov	edx,offset filetocheck
+	jnb	cd_ok		; flags set by CMP above
 
+	; It doesn't have the extra intro/outtro tracks - warn the user.
+	mov	edx,offset noextratracks
+	push	eax
+	mov	ah,9		; print message - safe to do this under DOS32 (and PMODE/W for that matter!)
+	pushfd
+	call	cs:old_int21
+	pop	eax
+
+cd_ok:
+	mov	edx,offset filetocheck
 	pushfd
 	call	cs:old_int21
 	; set carry as appropriate in the return flags
@@ -764,6 +788,8 @@ setup_ptrs_v121us:
 	mov	[pExitSign1],esi	; @ 0x5234F in the text section
 	lea	esi,[edi-(79B9Dh-524ACh)]
 	mov	[pExitSign2],esi	; @ 0x524AC in the text section
+	lea	esi,[edi-(79B9Dh-0CF8Eh)]
+	mov	[pPerdu],esi		; @ 0xCF8E in the text section
 	lea	esi,[edi-(79B9Dh-1A710h)]
 	mov	[pPlayTrack],esi	; @ 0x1A710 in the text section
 
@@ -793,6 +819,8 @@ setup_ptrs_v120de:
 	mov	[phighest_atrack],esi	; @ 0x17F952
 	lea	esi,[edi-(185EC8h-170AB7h)]
 	mov	[pcd_driveletter],esi	; @ 0x170AB7
+	lea	esi,[edi-(185EC8h-170AC5h)]
+	mov	[plang],esi		; @ 0x170AC5
 
 	mov	edi,[pInt31]		; @ 0x880C9
 	lea	esi,[edi-(880C9h-1AED8h)]
@@ -803,6 +831,10 @@ setup_ptrs_v120de:
 	mov	[pMenuTrackNo],esi	; @ 0x1AF80
 	lea	esi,[edi-(880C9h-1AFA8h)]
 	mov	[pGOverTrackNo],esi	; @ 0x1AFA8
+	lea	esi,[edi-(880C9h-16521h)]
+	mov	[pPlayIntro],esi	; @ 0x16521
+	lea	esi,[edi-(880C9h-33805h)]
+	mov	[pPlayOuttro],esi	; @ 0x33805
 	lea	esi,[edi-(880C9h-28848h)]
 	mov	[pTrackTabDone],esi	; @ 0x28848
 	lea	esi,[edi-(880C9h-79650h)]
@@ -825,6 +857,8 @@ setup_ptrs_v120de:
 	mov	[pExitSign1],esi	; @ 0x6035F
 	lea	esi,[edi-(880C9h-604BCh)]
 	mov	[pExitSign2],esi	; @ 0x604BC
+	lea	esi,[edi-(880C9h-1AF1Eh)]
+	mov	[pPerdu],esi		; @ 0x1AF1E
 	lea	esi,[edi-(880C9h-28660h)]
 	mov	[pPlayTrack],esi	; @ 0x28660
 
@@ -854,6 +888,8 @@ setup_ptrs_v112eu:
 	mov	[phighest_atrack],esi	; @ 0x17F7B2
 	lea	esi,[edi-(185D28h-17090Bh)]
 	mov	[pcd_driveletter],esi	; @ 0x17090B
+	lea	esi,[edi-(185D28h-170918h)]
+	mov	[plang],esi		; @ 0x170918
 
 	mov	edi,[pInt31]		; @ 0x872CD
 	lea	esi,[edi-(872CDh-1ADA8h)]
@@ -864,6 +900,10 @@ setup_ptrs_v112eu:
 	mov	[pMenuTrackNo],esi	; @ 0x1AE50
 	lea	esi,[edi-(872CDh-1AE78h)]
 	mov	[pGOverTrackNo],esi	; @ 0x1AE78
+	lea	esi,[edi-(872CDh-1651Eh)]
+	mov	[pIntroTrackNo],esi	; @ 0x1651E
+	lea	esi,[edi-(872CDh-33546h)]
+	mov	[pOuttroTrackNo],esi	; @ 0x33546
 	lea	esi,[edi-(872CDh-285C0h)]
 	mov	[pTrackTabDone],esi	; @ 0x285C0
 	lea	esi,[edi-(872CDh-789E0h)]
@@ -886,6 +926,8 @@ setup_ptrs_v112eu:
 	mov	[pExitSign1],esi	; @ 0x5F71F
 	lea	esi,[edi-(872CDh-5F87Ch)]
 	mov	[pExitSign2],esi	; @ 0x5F87C
+	lea	esi,[edi-(872CDh-1ADEEh)]
+	mov	[pPerdu],esi		; @ 0x1ADEE
 	lea	esi,[edi-(872CDh-283D8h)]
 	mov	[pPlayTrack],esi	; @ 0x283D8
 
@@ -1119,6 +1161,19 @@ common_tracktable_setup:
 	mov	edx,[pGOverTrackNo]
 	call	poketext
 
+	mov	edx,[pIntroTrackNo]
+	test	edx,edx
+	jz	no_introtrackno
+	mov	al,52
+	call	poketext
+
+	mov	edx,[pOuttroTrackNo]
+	test	edx,edx
+	jz	no_introtrackno
+	mov	al,55
+	call	poketext
+
+no_introtrackno:
 	; Now set a breakpoint so we can fill in the lengths of these tracks
 	; once the game has read them from the CD!
 	push	ecx
@@ -1151,7 +1206,20 @@ common_tracktable_setup:
 	call	set_breakpoint
 	mov	edx,[pExitSign2]
 	call	set_breakpoint
+	mov	edx,[pPerdu]
+	call	set_breakpoint
 
+	; Breakpoints to select the language-appropriate cutscene music
+	mov	edx,[pPlayIntro]
+	test	edx,edx
+	jz	no_introbkpt
+	call	set_breakpoint
+	mov	edx,[pPlayOuttro]
+	test	edx,edx
+	jz	no_introbkpt
+	call	set_breakpoint
+
+no_introbkpt:
 	pop	ecx			; we don't need the breakpoints' indices for now...
 	pop	ebx
 	pop	edx
@@ -1224,11 +1292,10 @@ bkpt_find:
 	std
 	repne	scasd
 	je	bkpt_found
-	cld
-
 	or	ecx,-1
 
 bkpt_found:
+	cld
 	pop	edi
 	pop	es
 	ret
@@ -1379,6 +1446,13 @@ bkpt_handler:
 	je	yay_fanfare
 	cmp	eax,[pExitSign2]
 	je	yay_fanfare
+	cmp	eax,[pPerdu]
+	je	snif_dead
+
+	cmp	eax,[pPlayIntro]
+	je	cutscene
+	cmp	eax,[pPlayOuttro]
+	je	cutscene
 
 	; Dunno what breakpoint that was then...
 bkpt_retpoint:
@@ -1533,6 +1607,7 @@ yay_fanfare:
 	mov	eax,[pPlayTrack]
 	mov	[ebp],eax
 	mov	eax,29			; Yeah!
+	mov	[music_dirty],80h	; set fanfare flag
 	jz	fanfare_privileged	; ZF set/cleared by ARPL above
 
 	; OK, Rayman's at the same privilege level as us, so there's only one stack to worry about
@@ -1551,6 +1626,30 @@ fanfare_privileged:
 
 	; Now return by the usual route, but make sure EAX is set to our track number
 	mov	[esp+4],eax
+	jmp	bkpt_retpoint
+
+; Rayman is dead :( Play a CD audio track, like the PS1 and Saturn versions
+snif_dead:
+	; We want to return directly to Rayman's function to play a CD audio track,
+	; and invoke it with track 30 (Rayman's death cries).
+	; Unlike for the fanfare, there's no need to mess with stacks.
+	; This is because we're replacing a JMP instruction that hops straight into
+	; "PlayTchatchVignette", and we're just redirecting to the CD audio function.
+	mov	eax,[pPlayTrack]
+	mov	[ebp],eax
+	mov	dword ptr [esp+4],30	; EAX --> Perdu
+	mov	[music_dirty],1		; set dirty flag to restart level music when Rayman respawns
+	jmp	bkpt_retpoint
+
+; Single-lang game version is about to play a cutscene - select the right music
+cutscene:
+	mov	ecx,[plang]
+	mov	bl,[es:ecx]		; BL contains the track number passed to the cutscene function
+	add	bl,52			; first intro track on custom CD image
+
+	cmp	eax,[pPlayOuttro]
+	jne	bkpt_retpoint
+	add	bl,3			; add three more to get outtro track
 	jmp	bkpt_retpoint
 
 ; == GP VIOLATION HANDLER ==

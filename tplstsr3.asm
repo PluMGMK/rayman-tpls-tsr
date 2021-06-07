@@ -158,6 +158,11 @@ exception_stackframe ENDS
 	; Files that Rayman may look for on the CD
 	filechecked1	db ":\rayman\rayman.exe",0
 	filechecked2	db ":\config.exe",0
+	; It checks for these at the beginning of Allegro Presto,
+	; and if they're not there, it's like "Thank you for playing Rayman."
+	; A cross between Rayman 2's pirate head and THEdragon's creepypasta...
+	filechecked3	db ":\rayman\intro.dat",0
+	filechecked4	db ":\rayman\conclu.dat",0
 	; What to open instead
 	filetocheck	db "NUL",0	; can always be opened!
 
@@ -299,7 +304,21 @@ open_oncd:
 	pop	esi
 	je	open_spooffile
 
-	; it's neither of the files to spoof
+	push	esi
+	mov	edi,offset filechecked3
+	mov	ecx,sizeof filechecked3
+	repe	cmpsb
+	pop	esi
+	je	open_redirectlocal	; can't redirect to NUL since it also checks the size!
+
+	push	esi
+	mov	edi,offset filechecked4
+	mov	ecx,sizeof filechecked4
+	repe	cmpsb
+	pop	esi
+	je	open_redirectlocal	; can't redirect to NUL since it also checks the size!
+
+	; it's none of the files to spoof
 	pop	es
 	pop	edi
 	pop	esi
@@ -356,6 +375,30 @@ cd_ng:
 	mov	ax,3		; pretend path not found
 	or	[ebp+8],1	; set carry
 	; return
+	pop	es
+	pop	edi
+	pop	esi
+	pop	ecx
+	pop	ebp
+	iretd
+
+open_redirectlocal:
+	; Redirect attempt to load a file in "X:\rayman\" to cwd.
+	; (Where X is the CD drive letter).
+	push	edx
+	add	edx,10		; "X:\rayman\" is 10 characters
+
+	pushfd
+	call	cs:old_int21
+	; set carry as appropriate in the return flags
+	setc	cl
+	mov	ch,byte ptr [ebp+8]
+	and	ch,0FEh		; clear carry
+	or	ch,cl		; set carry if necessary
+	mov	byte ptr [ebp+8],ch
+
+	; return
+	pop	edx
 	pop	es
 	pop	edi
 	pop	esi
@@ -598,8 +641,10 @@ poketext:
 	int	31h
 
 	mov	ax,8			; set segment limit
-	mov	cx,0FFFFh		; 4 GB limit
-	mov	dx,cx			; set lower 12 bits to page-align (??)
+	movzx	edx,[rayman_cs]
+	lsl	ecx,edx			; get original segment's limit
+	mov	dx,cx
+	shr	ecx,16
 	int	31h
 
 	pop	edx
@@ -866,10 +911,10 @@ setup_ptrs_v120de:
 
 setup_ptrs_v112eu:
 	mov	edi,[pRM_call_struct]	; @ 0x185D28
-	lea	esi,[edi-(185D28h-17075Eh)]
-	mov	[pnum_world],esi	; @ 0x17075E
 	lea	esi,[edi-(185D28h-170770h)]
-	mov	[pnum_level],esi	; @ 0x170770
+	mov	[pnum_world],esi	; @ 0x170770
+	lea	esi,[edi-(185D28h-17075Eh)]
+	mov	[pnum_level],esi	; @ 0x17075E
 	lea	esi,[edi-(185D28h-135EF3h)]
 	mov	[ptrack_table],esi	; @ 0x135EF3
 	lea	esi,[edi-(185D28h-135F74h)]

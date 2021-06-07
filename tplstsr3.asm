@@ -1247,10 +1247,13 @@ no_introtrackno:
 
 	; Breakpoints to make the PC version use CD audio where it normally doesn't
 	; (but other versions normally do)
-	mov	edx,[pExitSign1]
-	call	set_breakpoint
-	mov	edx,[pExitSign2]
-	call	set_breakpoint
+	; Actually, screw the exit-sign one. Not only does the fanfare always get
+	; cut off for an actual exit sign, but it also gets engaged for certain
+	; non-exit-sign events (e.g. beating Mister Sax, using the WINMAP cheat, etc.)
+	; mov	edx,[pExitSign1]
+	; call	set_breakpoint
+	; mov	edx,[pExitSign2]
+	; call	set_breakpoint
 	mov	edx,[pPerdu]
 	call	set_breakpoint
 

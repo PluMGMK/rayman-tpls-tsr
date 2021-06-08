@@ -1138,7 +1138,7 @@ common_tracktable_setup:
 	stosb
 	mov	al,32			; Suspense
 	stosb
-	mov	al,39			; Washing Machine from Space
+	mov	al,38			; Washing Machine from Space
 	stosb
 	mov	al,34			; The Magician's Challenge
 	; Two bonus levels

@@ -76,9 +76,9 @@ exception_stackframe ENDS
 	rayman_cs	dw ?	; Rayman's code segment
 	rayman_cs_asds	dw 0	; Rayman's code segment as a data segment, for poking!
 
-	NUM_BKPTS	equ 50	; more than we'll ever need, hopefully!
-	bkpt_addxs	dd NUM_BKPTS dup (0)
-	bkpt_origcode	dw NUM_BKPTS dup (0F5CDh)
+	NUM_HOOKS	equ 50	; more than we'll ever need, hopefully!
+	hook_addxs	dd NUM_HOOKS dup (0)
+	hook_origcode	dw NUM_HOOKS dup (0F5CDh)
 
 	; Pointers to code in Rayman
 	pInt31		dd ?
@@ -145,7 +145,7 @@ exception_stackframe ENDS
 			db "Aborting...",13,10,"$"
 	tsrok		db "Service installed - terminating successfully. You can play Rayman now!",13,10,"$"
 	unkver		db 33o,"[35m","PluM says: Unknown Rayman version (see log file). Aborting...",33o,"[37m",13,10,"$"
-	bkpterr		db 33o,"[35m","PluM couldn't install their breakpoint handler. Aborting...",33o,"[37m",13,10,"$"
+	hookerr		db 33o,"[35m","PluM couldn't install their hook vector. Aborting...",33o,"[37m",13,10,"$"
 	noextratracks	db 33o,"[35m","Warning: You are not using a custom CD image with intro/outtro tracks.",13,10
 			db 	"Intro and/or outtro cutscenes may be silent!",33o,"[37m",13,10,"$"
 	unhandled_gp	db 33o,"[35m","It's dead Jim. X(",33o,"[37m",13,10,"$"
@@ -165,6 +165,11 @@ exception_stackframe ENDS
 	filechecked4	db ":\rayman\conclu.dat",0
 	; What to open instead
 	filetocheck	db "NUL",0	; can always be opened!
+
+	; Some stuff for a Real-Mode installation checker
+	align		4
+	old_rmint2f	dd ?
+	instch_callstr	rmcall <?>
 
 entry:	; Welcome the user, hook int 31h and go resident
 	mov	edx,offset intro
@@ -232,10 +237,33 @@ noneed_gphandler:
 	mov	edx,offset new_int31
 	int	31h
 
-	mov	bl,0F5h		; our custom breakpoint vector
-	mov	edx,offset bkpt_handler
+	mov	bl,0F5h		; our custom hook vector
+	mov	edx,offset hook_handler
 	int	31h
 
+	; Install a Real-Mode installation checker on int 2Fh
+	mov	ax,0200h	; get rm interrupt vector
+	mov	bl,2Fh
+	int	31h
+	jc	skip_instcheck	; we've come too far to abort completely...
+	mov	[old_rmint2f],edx
+	mov	word ptr [old_rmint2f+2],cx
+
+	mov	ax,0303h	; allocate rm callback
+	push	cs
+	pop	ds
+	mov	esi,offset instcheck
+	mov	edi,offset instch_callstr
+	int	31h
+	push	es
+	pop	ds
+	jc	skip_instcheck
+
+	mov	ax,0201h	; set rm interrupt vector
+	mov	bl,2Fh
+	int	31h
+
+skip_instcheck:
 	mov	edx,offset tsrok
 	mov	ah,9		; print message - safe to do this under DOS32 (and PMODE/W for that matter!)
 	int	21h
@@ -249,6 +277,44 @@ failure:
 	int	21h
 
 ; ===== RESIDENT CODE =====
+
+; ==========================
+; == INSTALLATION CHECKER ==
+; == (Call from Real Mode)==
+; ==========================
+instcheck:
+	; Check for AH = CEh (an application-reserved function not on RBrown's list)
+	; And AL:BL:CL:DL = "TPLS"
+	cmp	word ptr [es:edi+rmcall._eax],0CE00h+'T'
+	jne	instcheck_passthrough
+	cmp	byte ptr [es:edi+rmcall._ebx],'P'
+	jne	instcheck_passthrough
+	cmp	byte ptr [es:edi+rmcall._ecx],'L'
+	jne	instcheck_passthrough
+	cmp	byte ptr [es:edi+rmcall._edx],'S'
+	jne	instcheck_passthrough
+
+	; Output is AL:BL:CL:DL = "PluM", all upper bytes zeroed
+	mov	[es:edi+rmcall._eax],'P'
+	mov	[es:edi+rmcall._ebx],'l'
+	mov	[es:edi+rmcall._ecx],'u'
+	mov	[es:edi+rmcall._edx],'M'
+
+	; Simulate an iret
+	add	[es:edi+rmcall._sp],6
+	push	edi
+	add	edi,rmcall._ip
+	movsd	; copy dword from rm stack @ DS:ESI to rm call struct's CS:IP field @ ES:EDI
+	pop	edi
+	iretd
+
+instcheck_passthrough:
+	; Resume Real Mode execution at old int 2F vector
+	mov	eax,[cs:old_rmint2f]
+	mov	dword ptr [es:edi+rmcall._ip],eax
+	iretd
+
+
 
 ; =====================
 ; == INT 21H HANDLER ==
@@ -674,29 +740,29 @@ poketext_retpoint:
 
 ; ===========
 ; SUBROUTINE:
-; int set_breakpoint@<ecx>(void *addx@<edx>)
-; Sets a breakpoint for *execution* at the given addx in Rayman's *code* segment.
-set_breakpoint:
+; int set_hookpoint@<ecx>(void *addx@<edx>)
+; Sets a hookpoint for *execution* at the given addx in Rayman's *code* segment.
+set_hookpoint:
 	push	eax
 
 	xor	eax,eax
-	call	bkpt_find		; find a null breakpoint
+	call	hook_find		; find a null hookpoint
 
-	mov	eax,offset bkpt_addxs
+	mov	eax,offset hook_addxs
 	mov	[eax+ecx*4],edx		; set the address
 
 	pop	eax
-	call	bkpt_activate		; activate the new breakpoint!
+	call	hook_activate		; activate the new hookpoint!
 	ret
 
 ; ===========
 ; SUBROUTINE:
-; void clear_breakpoint(int idx@<ecx>)
-clear_breakpoint:
-	call	bkpt_deactivate		; first, make sure it's inactive!
+; void clear_hookpoint(int idx@<ecx>)
+clear_hookpoint:
+	call	hook_deactivate		; first, make sure it's inactive!
 	push	eax
 
-	mov	eax,offset bkpt_addxs
+	mov	eax,offset hook_addxs
 	mov	dword ptr [eax+ecx*4],0
 
 	pop	eax
@@ -1219,56 +1285,56 @@ common_tracktable_setup:
 	call	poketext
 
 no_introtrackno:
-	; Now set a breakpoint so we can fill in the lengths of these tracks
+	; Now set a hook so we can fill in the lengths of these tracks
 	; once the game has read them from the CD!
 	push	ecx
 	mov	edx,[pTrackTabDone]
-	call	set_breakpoint
+	call	set_hookpoint
 
-	; General breakpoints
+	; General hooks
 	mov	edx,[pLevelStart1]
-	call	set_breakpoint
+	call	set_hookpoint
 	mov	edx,[pLevelStart2]
-	call	set_breakpoint
+	call	set_hookpoint
 	mov	edx,[pLevelEnd1]
-	call	set_breakpoint
+	call	set_hookpoint
 	mov	edx,[pLevelEnd2]
-	call	set_breakpoint
+	call	set_hookpoint
 
-	; Breakpoints to react to things in the game
+	; Hooks to react to things in the game
 	mov	edx,[pDoGrowingPlat]
-	call	set_breakpoint
+	call	set_hookpoint
 	mov	edx,[pMoskitoLock]
-	call	set_breakpoint
+	call	set_hookpoint
 	mov	edx,[pMoskitoFast]
-	call	set_breakpoint
+	call	set_hookpoint
 	mov	edx,[pMoskitoSlow]
-	call	set_breakpoint
+	call	set_hookpoint
 
-	; Breakpoints to make the PC version use CD audio where it normally doesn't
+	; Hookks to make the PC version use CD audio where it normally doesn't
 	; (but other versions normally do)
 	; Actually, screw the exit-sign one. Not only does the fanfare always get
 	; cut off for an actual exit sign, but it also gets engaged for certain
 	; non-exit-sign events (e.g. beating Mister Sax, using the WINMAP cheat, etc.)
 	; mov	edx,[pExitSign1]
-	; call	set_breakpoint
+	; call	set_hookpoint
 	; mov	edx,[pExitSign2]
-	; call	set_breakpoint
+	; call	set_hookpoint
 	mov	edx,[pPerdu]
-	call	set_breakpoint
+	call	set_hookpoint
 
-	; Breakpoints to select the language-appropriate cutscene music
+	; Hooks to select the language-appropriate cutscene music
 	mov	edx,[pPlayIntro]
 	test	edx,edx
-	jz	no_introbkpt
-	call	set_breakpoint
+	jz	no_introhook
+	call	set_hookpoint
 	mov	edx,[pPlayOuttro]
 	test	edx,edx
-	jz	no_introbkpt
-	call	set_breakpoint
+	jz	no_introhook
+	call	set_hookpoint
 
-no_introbkpt:
-	pop	ecx			; we don't need the breakpoints' indices for now...
+no_introhook:
+	pop	ecx			; we don't need the hookpoints' indices for now...
 	pop	ebx
 	pop	edx
 	pop	eax
@@ -1276,9 +1342,9 @@ no_introbkpt:
 	jmp	passthrough
 
 skipinstcheck:
-	; Reactivate all breakpoints.
+	; Reactivate all hookpoints.
 	; NB: Because this happens here, we need to make sure int 2Fh
-	; never gets called from within the breakpoint handler!
+	; never gets called from within the hookpoint handler!
 	push	ecx
 	push	eax
 	push	es
@@ -1286,18 +1352,18 @@ skipinstcheck:
 	mov	di,ds
 	mov	es,di
 
-	mov	edi,(offset bkpt_origcode)-4
-	mov	ecx,NUM_BKPTS
+	mov	edi,(offset hook_origcode)-4
+	mov	ecx,NUM_HOOKS
 	std
 	xor	eax,eax
-bkpt_reac_loop:
-	scasd				; check if there is a breakpoint with this idx
-	loope	bkpt_reac_loop		; this decrements ECX!
-	je	bkpt_reac_done		; if ECX and [ES:EDI] are both zero, we're finished
-	call	bkpt_activate		; the loope instruction has made this the right idx for here...
+hook_reac_loop:
+	scasd				; check if there is a hookpoint with this idx
+	loope	hook_reac_loop		; this decrements ECX!
+	je	hook_reac_done		; if ECX and [ES:EDI] are both zero, we're finished
+	call	hook_activate		; the loope instruction has made this the right idx for here...
 	inc	ecx			; cancel the effect of the loope instruction before next iteration
-	loop	bkpt_reac_loop
-bkpt_reac_done:
+	loop	hook_reac_loop
+hook_reac_done:
 	cld
 
 	pop	edi
@@ -1314,35 +1380,35 @@ mscdex_retpoint:
 
 ; ===========
 ; SUBROUTINE:
-; bool bkpt_active(int idx@<ecx>);
-; ZF clear if breakpoint is active, set if inactive
-bkpt_active:
+; bool hook_active(int idx@<ecx>);
+; ZF clear if hookpoint is active, set if inactive
+hook_active:
 	push	edx
-	mov	edx,offset bkpt_origcode
+	mov	edx,offset hook_origcode
 	cmp	word ptr [edx+ecx*2],0F5CDh
 	pop	edx
 	ret
 
 ; ===========
 ; SUBROUTINE:
-; int bkpt_find@<ecx>(void *addx@<eax>);
-; Finds and returns the index of the *last* breakpoint in the list
+; int hook_find@<ecx>(void *addx@<eax>);
+; Finds and returns the index of the *last* hookpoint in the list
 ; corresponding to the given addx.
 ; If none, returns -1
-bkpt_find:
+hook_find:
 	push	es
 	push	edi
 	mov	di,ds
 	mov	es,di
 
-	mov	edi,(offset bkpt_origcode)-4
-	mov	ecx,NUM_BKPTS
+	mov	edi,(offset hook_origcode)-4
+	mov	ecx,NUM_HOOKS
 	std
 	repne	scasd
-	je	bkpt_found
+	je	hook_found
 	or	ecx,-1
 
-bkpt_found:
+hook_found:
 	cld
 	pop	edi
 	pop	es
@@ -1350,22 +1416,22 @@ bkpt_found:
 
 ; ===========
 ; SUBROUTINE:
-; ushort bkpt_swapcode@<eax>(int idx@<ecx>);
-; Swaps the word at the idx-th breakpoint in the text section
+; ushort hook_swapcode@<eax>(int idx@<ecx>);
+; Swaps the word at the idx-th hookpoint in the text section
 ; with the word stored in the table
-bkpt_swapcode:
+hook_swapcode:
 	push	ebx
 	push	edx
 
-	mov	edx,offset bkpt_origcode
+	mov	edx,offset hook_origcode
 	mov	ax,[edx+ecx*2]
-	mov	edx,offset bkpt_addxs
+	mov	edx,offset hook_addxs
 	mov	edx,[edx+ecx*4]
 	mov	ebx,2			; poke a word
 
 	call	poketext
 
-	mov	edx,offset bkpt_origcode
+	mov	edx,offset hook_origcode
 	mov	[edx+ecx*2],ax		; store the word we just replaced
 
 	pop	edx
@@ -1374,26 +1440,26 @@ bkpt_swapcode:
 
 ; ===========
 ; SUBROUTINE:
-; void bkpt_activate(int idx@<ecx>);
-; Activates the idx-th breakpoint if it's inactive.
-bkpt_activate:
-	call	bkpt_active
-	jnz	bkpt_activate_retp
+; void hook_activate(int idx@<ecx>);
+; Activates the idx-th hookpoint if it's inactive.
+hook_activate:
+	call	hook_active
+	jnz	hook_activate_retp
 	push	eax
-	call	bkpt_swapcode
+	call	hook_swapcode
 	pop	eax
-bkpt_activate_retp:
+hook_activate_retp:
 	ret
 
 ; ===========
 ; SUBROUTINE:
-; void bkpt_deactivate(int idx@<ecx>);
-; Dectivates the idx-th breakpoint if it's active.
-bkpt_deactivate:
-	call	bkpt_active
-	jz	bkpt_activate_retp
+; void hook_deactivate(int idx@<ecx>);
+; Dectivates the idx-th hookpoint if it's active.
+hook_deactivate:
+	call	hook_active
+	jz	hook_activate_retp
 	push	eax
-	call	bkpt_swapcode
+	call	hook_swapcode
 	pop	eax
 	ret
 
@@ -1452,10 +1518,10 @@ change_music:
 	pop	edx
 	ret
 
-; =============================================================
-; == HANDLER for our *custom* breakpoint mechanism on int F5 ==
-; =============================================================
-bkpt_handler:
+; =================================================
+; == HANDLER for our hooking mechanism on int F5 ==
+; =================================================
+hook_handler:
 	sub	dword ptr [esp],2	; rewind to before the int 0F5h instruction
 	push	ebp
 	lea	ebp,[esp+4]		; convenient pointer to stack frame
@@ -1465,8 +1531,8 @@ bkpt_handler:
 	push	eax
 	push	ecx
 	mov	eax,[ebp]		; the return addx
-	call	bkpt_find
-	call	bkpt_deactivate
+	call	hook_find
+	call	hook_deactivate
 
 	cmp	eax,[pTrackTabDone]
 	je	rbook_table_populated
@@ -1502,8 +1568,8 @@ bkpt_handler:
 	cmp	eax,[pPlayOuttro]
 	je	cutscene
 
-	; Dunno what breakpoint that was then...
-bkpt_retpoint:
+	; Dunno what hookpoint that was then...
+hook_retpoint:
 	pop	ecx
 	pop	eax
 	pop	ds
@@ -1514,7 +1580,7 @@ bkpt_retpoint:
 ; This means we can stop watching the flag, and
 ; that we can determine the lengths of the tracks.
 rbook_table_populated:
-	call	clear_breakpoint	; no need for this breakpoint anymore!
+	call	clear_hookpoint	; no need for this hookpoint anymore!
 
 	push	esi
 	push	edi
@@ -1557,25 +1623,25 @@ tracklen_loop:
 	pop	edx
 	pop	edi
 	pop	esi
-	jmp	bkpt_retpoint
+	jmp	hook_retpoint
 
 ; Entering a level - restart the music if it's been tampered with...
 now_in_level:
 	xor	ecx,ecx
 	cmp	[music_dirty],cl
-	jz	bkpt_retpoint
+	jz	hook_retpoint
 
 	; It's been tampered with - reset
 	mov	eax,[pcdTime]
 	mov	[es:eax],ecx
 	mov	[music_dirty],cl
-	jmp	bkpt_retpoint
+	jmp	hook_retpoint
 
 ; Leaving a level - restore the default music track if needed, and mark as dirty.
 no_longer_in_level:
 	xor	ecx,ecx
 	cmp	[tra_to_restore],cl
-	jz	bkpt_retpoint
+	jz	hook_retpoint
 
 	; It's been tampered with - reset
 	cmp	eax,[pMoskitoSlow]
@@ -1598,43 +1664,43 @@ reset_decided:
 	mov	eax,[plen_to_restore]
 	mov	[es:eax],ecx		; restore the default track length
 
-	jmp	bkpt_retpoint
+	jmp	hook_retpoint
 
 ; Rayman's planted a seed - we should switch the music to Suspense if it's not already.
 ; No need to check the world/level, since there's only one level in the whole game where this happens...
 plant_growing:
 	xor	ecx,ecx
 	cmp	[tra_to_restore],cl
-	jnz	bkpt_retpoint		; music already changed
+	jnz	hook_retpoint		; music already changed
 
 	mov	al,10			; Suspense - The Flood
 	call	change_music
-	jmp	bkpt_retpoint
+	jmp	hook_retpoint
 
 ; A mosquito fight is about to begin so the screen has been locked
 moskito_fight:
 	mov	ecx,[pnum_level]
 	cmp	word ptr [es:ecx],6
-	jne	bkpt_retpoint		; it's not Anguish Lagoon
+	jne	hook_retpoint		; it's not Anguish Lagoon
 
 	xor	ecx,ecx
 	cmp	[tra_to_restore],cl
-	jnz	bkpt_retpoint		; music already changed
+	jnz	hook_retpoint		; music already changed
 
 	mov	al,7			; Bzzit Attacks
 	call	change_music
-	jmp	bkpt_retpoint
+	jmp	hook_retpoint
 
 ; Rayman's riding a mosquito, who has just started going really fast - switch the music to "Hold on Tight!" if it's not already.
 ; No need to check the world/level, since there's only one level in the whole game where this happens...
 moskito_ride_speedup:
 	xor	ecx,ecx
 	cmp	[tra_to_restore],cl
-	jnz	bkpt_retpoint		; music already changed
+	jnz	hook_retpoint		; music already changed
 
 	mov	al,6			; Hold on Tight!
 	call	change_music
-	jmp	bkpt_retpoint
+	jmp	hook_retpoint
 
 ; Rayman's reached the exit sign! Play a CD audio track to celebrate, like the PS1 and Saturn versions.
 ; TODO: Do we really want this? It's a nice idea in principle, but the game seems to stop the audio 
@@ -1646,7 +1712,7 @@ yay_fanfare:
 	arpl	ax,cx
 
 	; Before we diverge our paths, save a new return address in ECX.
-	; These "exit sign" breakpoints occur at a call (5bytes) to a null sub, which can be skipped over.
+	; These "exit sign" hookpoints occur at a call (5bytes) to a null sub, which can be skipped over.
 	mov	ecx,[ebp]
 	lea	ecx,[ecx+5]
 
@@ -1674,7 +1740,7 @@ fanfare_privileged:
 
 	; Now return by the usual route, but make sure EAX is set to our track number
 	mov	[esp+4],eax
-	jmp	bkpt_retpoint
+	jmp	hook_retpoint
 
 ; Rayman is dead :( Play a CD audio track, like the PS1 and Saturn versions
 snif_dead:
@@ -1687,7 +1753,7 @@ snif_dead:
 	mov	[ebp],eax
 	mov	dword ptr [esp+4],30	; EAX --> Perdu
 	mov	[music_dirty],1		; set dirty flag to restart level music when Rayman respawns
-	jmp	bkpt_retpoint
+	jmp	hook_retpoint
 
 ; Single-lang game version is about to play a cutscene - select the right music
 cutscene:
@@ -1696,9 +1762,9 @@ cutscene:
 	add	bl,52			; first intro track on custom CD image
 
 	cmp	eax,[pPlayOuttro]
-	jne	bkpt_retpoint
+	jne	hook_retpoint
 	add	bl,3			; add three more to get outtro track
-	jmp	bkpt_retpoint
+	jmp	hook_retpoint
 
 ; == GP VIOLATION HANDLER ==
 ; Prevent interference with Debug Registers.

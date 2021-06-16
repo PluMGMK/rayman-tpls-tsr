@@ -16,17 +16,32 @@ entry:
 	; Check for VCPI
 	mov	ax,3567h	; get interrupt vector 67h
 	int	21h
-
 	mov	word ptr [ems_vec],bx
 	mov	word ptr [ems_vec+2],es
+
+	; TODO: Check for DPMI and invoke CWSDPMI if necessary and possible
+
 	or	bx,word ptr [ems_vec+2]
 	jz	no_vcpi		; vector is null
+
+	; Before actually checking for VCPI, check for Windows 3.0
+	; Apparently, it "objects violently" to VCPI checks...
+	mov	ax,4680h
+	int	2Fh
+	test	ax,ax
+	jz	hide_vcpi	; Windows 3.0 running - hide VCPI to make sure nothing else incurs its wrath!
+
+	mov	ax,1600h
+	int	2Fh
+	cmp	ax,0003h	; Windows 3.0 in enhanced mode
+	je	hide_vcpi
 
 	mov	ax,0DE00h	; VCPI installation check
 	int	67h
 	test	ah,ah
 	jnz	no_vcpi		; AH did not get zeroed
 
+hide_vcpi:
 	; OK, VCPI is available.
 	; This means we need to hide it from DOS32 to make it use DPMI!
 	; (May also be the case for Rayman itself, depending on how 
@@ -36,6 +51,22 @@ entry:
 	int	21h
 
 no_vcpi:
+	; Check if TPLS is already installed
+	mov	ax,0CE00h + 'T'
+	mov	bl,'P'
+	mov	cl,'L'
+	mov	dl,'S'
+	int	2Fh
+	cmp	al,'P'
+	jne	install_tsr
+	cmp	bl,'l'
+	jne	install_tsr
+	cmp	cl,'u'
+	jne	install_tsr
+	cmp	dl,'M'
+	je	tsr_installed
+
+install_tsr:
 	mov	ax,4B00h	; exec and load
 	mov	dx,offset tsr_exe
 	push	ds
@@ -58,6 +89,7 @@ no_vcpi:
 	cmp	ah,3		; TSR-ed
 	jne	failure		; no need to print a message since the TSR will have done so anyway
 
+tsr_installed:
 	; We're good so far - run Rayman now!
 	mov	ax,4B00h	; exec and load
 	mov	dx,offset ray_exe

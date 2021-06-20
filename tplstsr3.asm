@@ -159,7 +159,7 @@ exception_stackframe ENDS
 			db	"The TSR will now attempt to uninstall itself.",13,10
 			db	"If you want to use it again, please run TPLSTSR3.EXE again IMMEDIATELY.",13,10
 			db	"For reasons I still don't understand, running Rayman (or maybe any DPMI app),",13,10
-			db	"between now and re-installing it, will compromise system integrity!",13,10
+			db	"and then re-running the TSR, will compromise system integrity!",13,10
 			db	"(If you want to re-run Rayman right now, just run TPLSWRAP.EXE again.)",13,10
 			db 	33o,"[37m","$"
 	instcheck_sig	db "PluM's TPLS TSR",0	; signature to place in conventional memory

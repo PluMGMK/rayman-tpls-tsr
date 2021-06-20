@@ -69,12 +69,17 @@ exception_stackframe ENDS
 
 	old_int31	df ?
 	mydatasel	dw ?	; A selector to access our local data
-	old_int21	df ?
+	dos32_int21	df ?	; int 21h vector provided by DOS32
 	raymanpsp	dw ?	; Rayman's PSP
-	old_gphandler	df ?
+	old_int21	df ?	; int 21h vector at the time of Rayman's running (i.e. PMODE/W's)
 	callerpsp	dw ?	; our current caller's PSP
+	old_gphandler	df ?
 	rayman_cs	dw ?	; Rayman's code segment
 	rayman_cs_asds	dw 0	; Rayman's code segment as a data segment, for poking!
+	align 4
+
+	saved_excvecs	df 20h dup (?)
+	saved_intvecs	df 100h dup (?)
 
 	NUM_HOOKS	equ 50	; more than we'll ever need, hopefully!
 	hook_addxs	dd NUM_HOOKS dup (0)
@@ -143,12 +148,20 @@ exception_stackframe ENDS
 	nogphandler	db "Couldn't install General Protection Fault handler.",13,10
 			db "This means I can't stop Rayman crashing when it messes with the Debug Registers.",13,10
 			db "Aborting...",13,10,"$"
+	savingvecs	db "Saving exception and interrupt vectors...",13,10,"$"
 	tsrok		db "Service installed - terminating successfully. You can play Rayman now!",13,10,"$"
 	unkver		db 33o,"[35m","PluM says: Unknown Rayman version (see log file). Aborting...",33o,"[37m",13,10,"$"
 	hookerr		db 33o,"[35m","PluM couldn't install their hook vector. Aborting...",33o,"[37m",13,10,"$"
 	noextratracks	db 33o,"[35m","Warning: You are not using a custom CD image with intro/outtro tracks.",13,10
 			db 	"Intro and/or outtro cutscenes may be silent!",33o,"[37m",13,10,"$"
 	unhandled_gp	db 33o,"[35m","It's dead Jim. X(",33o,"[37m",13,10,"$"
+	final_warning	db 33o,"[35m","/!\ PluM's EXIT-TIME WARNING /!\",13,10
+			db	"The TSR will now attempt to uninstall itself.",13,10
+			db	"If you want to use it again, please re-run TPLSTSR3.EXE again IMMEDIATELY.",13,10
+			db	"For reasons I still don't understand, running Rayman (or maybe any DPMI app),",13,10
+			db	"between now and re-installing it, will compromise system integrity!",13,10
+			db	"(If you want to re-run Rayman right now, just run TPLSWRAP.EXE again.)",13,10
+			db 	33o,"[37m",13,10,"$"
 
 	; Rayman version strings
 	ray121us	db "RAYMAN (US) v1.21"
@@ -237,6 +250,17 @@ noneed_gphandler:
 	mov	edx,offset new_int31
 	int	31h
 
+	mov	ax,0204h	; get interrupt vector
+	mov	bl,21h
+	int	31h
+	mov	dword ptr [dos32_int21],edx
+	mov	word ptr [dos32_int21+4],cx
+
+	inc	ax		; set interrupt vector
+	mov	cx,cs
+	mov	edx,offset int21_exithack
+	int	31h
+
 	mov	bl,0F5h		; our custom hook vector
 	mov	edx,offset hook_handler
 	int	31h
@@ -245,7 +269,6 @@ noneed_gphandler:
 	mov	ax,0200h	; get rm interrupt vector
 	mov	bl,2Fh
 	int	31h
-	jc	skip_instcheck	; we've come too far to abort completely...
 	mov	[old_rmint2f],edx
 	mov	word ptr [old_rmint2f+2],cx
 
@@ -257,13 +280,43 @@ noneed_gphandler:
 	int	31h
 	push	es
 	pop	ds
-	jc	skip_instcheck
+	jc	skip_tplsinstcheck	; we've come too far to abort completely...
 
 	mov	ax,0201h	; set rm interrupt vector
 	mov	bl,2Fh
 	int	31h
 
-skip_instcheck:
+skip_tplsinstcheck:
+	mov	edx,offset savingvecs
+	mov	ah,9		; print message - safe to do this under DOS32 (and PMODE/W for that matter!)
+	int	21h
+
+	mov	ax,0202h	; get exception handler
+	mov	bl,1Fh
+	mov	edi,offset saved_excvecs + 6*1Fh
+
+save_excvec_loop:
+	int	31h
+	jc	save_intvecs	; exceptions not supported by this host...
+	mov	[edi],edx
+	mov	[edi+4],cx
+	sub	edi,6
+	dec	bl
+	jns	save_excvec_loop
+
+save_intvecs:
+	mov	ax,0204h	; get interrupt handler
+	xor	bl,bl
+	mov	edi,offset saved_intvecs
+	
+save_intvec_loop:
+	int	31h
+	mov	[edi],edx
+	mov	[edi+4],cx
+	add	edi,6
+	inc	bl
+	jnz	save_intvec_loop
+
 	mov	edx,offset tsrok
 	mov	ah,9		; print message - safe to do this under DOS32 (and PMODE/W for that matter!)
 	int	21h
@@ -302,23 +355,95 @@ instcheck:
 
 	; Simulate an iret
 	add	[es:edi+rmcall._sp],6
-	push	edi
-	add	edi,rmcall._ip
-	movsd	; copy dword from rm stack @ DS:ESI to rm call struct's CS:IP field @ ES:EDI
-	pop	edi
-	iretd
+	lodsd	; copy dword from rm stack @ DS:ESI to rm call struct's CS:IP field @ ES:EDI
+	jmp	instcheck_setretaddr
 
 instcheck_passthrough:
 	; Resume Real Mode execution at old int 2F vector
 	mov	eax,[cs:old_rmint2f]
+instcheck_setretaddr:
 	mov	dword ptr [es:edi+rmcall._ip],eax
 	iretd
 
 
 
-; =====================
-; == INT 21H HANDLER ==
-; =====================
+; ======================
+; == INT 21H HANDLERS ==
+; ======================
+
+; This handler gets installed when we start. Its purpose is to make sure
+; DOS32 cleans up after itself when Rayman (or any other DPMI app) exits.
+; DOS32 doesn't perform any cleanup if int 21h AH=4Ch is called from a 
+; code segment other than ours. In theory, this is good, since we're a
+; TSR, but in practice, the DPMI host does some other cleanup which ends
+; up leaving the entire DOS Machine in a pretty screwed-up state.
+int21_exithack:
+	cmp	ah,4Ch		; exit
+	je	do_exithack
+	jmp	cs:dos32_int21	; simple passthrough
+
+do_exithack:
+	push	eax
+	push	ebx
+	push	ecx
+	push	edx
+	push	esi
+
+	; restore exception vectors...
+	mov	ax,0203h	; set exception handler
+	mov	bl,1Fh
+	mov	esi,offset saved_excvecs + 6*1Fh
+
+restore_excvec_loop:
+	mov	edx,[cs:esi]
+	mov	cx,[cs:esi+4]
+	; int	31h
+	; jc	restore_intvecs	; exceptions not supported by this host...
+	sub	esi,6
+	dec	bl
+	jns	restore_excvec_loop
+
+restore_intvecs:
+	; restore interrupt vectors...
+	mov	ax,0205h	; set interrupt handler
+	xor	bl,bl
+	mov	esi,offset saved_intvecs
+	
+restore_intvec_loop:
+	mov	edx,[cs:esi]
+	mov	cx,[cs:esi+4]
+	int	31h
+	add	esi,6
+	inc	bl
+	jnz	restore_intvec_loop
+
+	; get rid of our installation check too...
+	; TODO: This doesn't work under Rayman!
+	; PMODE/W "restores" the entire RM IVT *after* termination...
+	; Need to come up with a non-IVT-related instcheck mechanism
+	mov	edx,[cs:old_rmint2f]
+	mov	ecx,[cs:old_rmint2f+2]
+	mov	ax,0201h	; set rm interrupt vector
+	mov	bl,2Fh
+	int	31h
+
+	mov	edx,offset final_warning
+	mov	ah,9		; print message - safe to do this under DOS32 (and PMODE/W for that matter!)
+	pushfd
+	call	cs:dos32_int21
+
+	pop	esi
+	pop	edx
+	pop	ecx
+	pop	ebx
+	pop	eax
+
+	pushfd
+	call	cs:dos32_int21
+	; DOESN'T RETURN!
+
+; This handler gets installed for certain Rayman versions to hook file I/O
+; and circumvent CD checks. This is the straightforward one.
 new_int21:
 	cmp	ah,3Dh		; open
 	je	new_int21_open

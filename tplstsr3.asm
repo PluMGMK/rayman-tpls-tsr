@@ -139,6 +139,7 @@ exception_stackframe ENDS
 	entete_buf	db ENTETE_SIZE dup (?)
 
 	; DOS strings
+	already		db "TPLS already resident. Aborting. You can just play Rayman.",13,10,"$"
 	intro		db "Welcome to ",33o,"[35mP",33o,"[95ml",33o,"[35mu",33o,"[95mM",33o,"[35m'",33o,"[95ms",33o,"[37m TPLS TSR!",13,10,13,10
 			db "Checking for DPMI...",13,10,"$"
 	NODPMI_EXPLAIN	equ "In VCPI/raw mode, I can't guarantee continuity of int 31h from DOS32 to PMODE/W.",13,10,"$"
@@ -155,13 +156,6 @@ exception_stackframe ENDS
 	noextratracks	db 33o,"[35m","Warning: You are not using a custom CD image with intro/outtro tracks.",13,10
 			db 	"Intro and/or outtro cutscenes may be silent!",33o,"[37m",13,10,"$"
 	unhandled_gp	db 33o,"[35m","It's dead Jim. X(",33o,"[37m",13,10,"$"
-	final_warning	db 33o,"[35m","/!\ PluM's EXIT-TIME WARNING /!\",13,10
-			db	"The TSR will now attempt to uninstall itself.",13,10
-			db	"If you want to use it again, please re-run TPLSTSR3.EXE again IMMEDIATELY.",13,10
-			db	"For reasons I still don't understand, running Rayman (or maybe any DPMI app),",13,10
-			db	"and then re-running the TSR, will compromise system integrity!",13,10
-			db	"(If you want to re-run Rayman right now, just run TPLSWRAP.EXE again.)",13,10
-			db 	33o,"[37m",13,10,"$"
 
 	; Rayman version strings
 	ray121us	db "RAYMAN (US) v1.21"
@@ -185,6 +179,23 @@ exception_stackframe ENDS
 	instch_callstr	rmcall <?>
 
 entry:	; Welcome the user, hook int 31h and go resident
+	; Check if TPLS is already installed
+	mov	ax,0CE00h + 'T'
+	mov	bl,'P'
+	mov	cl,'L'
+	mov	dl,'S'
+	int	2Fh
+	cmp	al,'P'
+	jne	welcome
+	cmp	bl,'l'
+	jne	welcome
+	cmp	cl,'u'
+	jne	welcome
+	cmp	dl,'M'
+	mov	edx,offset already
+	je	failure
+
+welcome:
 	mov	edx,offset intro
 	mov	ah,9		; print message - safe to do this under DOS32 (and PMODE/W for that matter!)
 	int	21h
@@ -372,17 +383,24 @@ instcheck_setretaddr:
 ; ======================
 
 ; This handler gets installed when we start. Its purpose is to make sure
-; DOS32 cleans up after itself when Rayman (or any other DPMI app) exits.
-; DOS32 doesn't perform any cleanup if int 21h AH=4Ch is called from a 
-; code segment other than ours. In theory, this is good, since we're a
-; TSR, but in practice, the DPMI host does some other cleanup which ends
-; up leaving the entire DOS Machine in a pretty screwed-up state.
+; Rayman (or any other DPMI app) cleans up after itself when it exits.
+; It also blanks `raymanpsp`, to make sure that all our setup code gets
+; re-run if Rayman happens to be started again at the same segment.
 int21_exithack:
 	cmp	ah,4Ch		; exit
 	je	do_exithack
 	jmp	cs:dos32_int21	; simple passthrough
 
 do_exithack:
+	; if this is Rayman, then we need to forget his PSP
+	; so when he runs again, we'll re-do all our setup
+	push	ds
+	mov	ds,[cs:mydatasel]
+	call	get_psp
+	jne	exithack_notrayman
+	mov	[raymanpsp],0
+
+exithack_notrayman:
 	push	eax
 	push	ebx
 	push	ecx
@@ -395,10 +413,10 @@ do_exithack:
 	mov	esi,offset saved_excvecs + 6*1Fh
 
 restore_excvec_loop:
-	mov	edx,[cs:esi]
-	mov	cx,[cs:esi+4]
-	; int	31h
-	; jc	restore_intvecs	; exceptions not supported by this host...
+	mov	edx,[esi]
+	mov	cx,[esi+4]
+	int	31h
+	jc	restore_intvecs	; exceptions not supported by this host...
 	sub	esi,6
 	dec	bl
 	jns	restore_excvec_loop
@@ -410,37 +428,21 @@ restore_intvecs:
 	mov	esi,offset saved_intvecs
 	
 restore_intvec_loop:
-	mov	edx,[cs:esi]
-	mov	cx,[cs:esi+4]
+	mov	edx,[esi]
+	mov	cx,[esi+4]
 	int	31h
 	add	esi,6
 	inc	bl
 	jnz	restore_intvec_loop
-
-	; get rid of our installation check too...
-	; TODO: This doesn't work under Rayman!
-	; PMODE/W "restores" the entire RM IVT *after* termination...
-	; Need to come up with a non-IVT-related instcheck mechanism
-	mov	edx,[cs:old_rmint2f]
-	mov	ecx,[cs:old_rmint2f+2]
-	mov	ax,0201h	; set rm interrupt vector
-	mov	bl,2Fh
-	int	31h
-
-	mov	edx,offset final_warning
-	mov	ah,9		; print message - safe to do this under DOS32 (and PMODE/W for that matter!)
-	pushfd
-	call	cs:dos32_int21
 
 	pop	esi
 	pop	edx
 	pop	ecx
 	pop	ebx
 	pop	eax
+	pop	ds
+	jmp	cs:dos32_int21
 
-	pushfd
-	call	cs:dos32_int21
-	; DOESN'T RETURN!
 
 ; This handler gets installed for certain Rayman versions to hook file I/O
 ; and circumvent CD checks. This is the straightforward one.
@@ -1436,7 +1438,7 @@ no_introtrackno:
 	mov	edx,[pMoskitoSlow]
 	call	set_hookpoint
 
-	; Hookks to make the PC version use CD audio where it normally doesn't
+	; Hooks to make the PC version use CD audio where it normally doesn't
 	; (but other versions normally do)
 	; Actually, screw the exit-sign one. Not only does the fanfare always get
 	; cut off for an actual exit sign, but it also gets engaged for certain

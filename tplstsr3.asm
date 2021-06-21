@@ -76,7 +76,7 @@ exception_stackframe ENDS
 	old_gphandler	df ?
 	rayman_cs	dw ?	; Rayman's code segment
 	rayman_cs_asds	dw 0	; Rayman's code segment as a data segment, for poking!
-	instcheck_sel	dw 0	; selector to paragraph of conventional memory with our signature
+	align 4
 
 	saved_excvecs	df 20h dup (?)
 	saved_intvecs	df 100h dup (?)
@@ -155,14 +155,13 @@ exception_stackframe ENDS
 	noextratracks	db 33o,"[35m","Warning: You are not using a custom CD image with intro/outtro tracks.",13,10
 			db 	"Intro and/or outtro cutscenes may be silent!",33o,"[37m",13,10,"$"
 	unhandled_gp	db 33o,"[35m","It's dead Jim. X(",33o,"[37m",13,10,"$"
-	final_warning	db 33o,"[35m",13,10,"/!\ PluM's EXIT-TIME WARNING /!\",13,10
+	final_warning	db 33o,"[35m","/!\ PluM's EXIT-TIME WARNING /!\",13,10
 			db	"The TSR will now attempt to uninstall itself.",13,10
-			db	"If you want to use it again, please run TPLSTSR3.EXE again IMMEDIATELY.",13,10
+			db	"If you want to use it again, please re-run TPLSTSR3.EXE again IMMEDIATELY.",13,10
 			db	"For reasons I still don't understand, running Rayman (or maybe any DPMI app),",13,10
 			db	"and then re-running the TSR, will compromise system integrity!",13,10
 			db	"(If you want to re-run Rayman right now, just run TPLSWRAP.EXE again.)",13,10
-			db 	33o,"[37m","$"
-	instcheck_sig	db "PluM's TPLS TSR",0	; signature to place in conventional memory
+			db 	33o,"[37m",13,10,"$"
 
 	; Rayman version strings
 	ray121us	db "RAYMAN (US) v1.21"
@@ -179,6 +178,11 @@ exception_stackframe ENDS
 	filechecked4	db ":\rayman\conclu.dat",0
 	; What to open instead
 	filetocheck	db "NUL",0	; can always be opened!
+
+	; Some stuff for a Real-Mode installation checker
+	align		4
+	old_rmint2f	dd ?
+	instch_callstr	rmcall <?>
 
 entry:	; Welcome the user, hook int 31h and go resident
 	mov	edx,offset intro
@@ -261,20 +265,26 @@ noneed_gphandler:
 	mov	edx,offset hook_handler
 	int	31h
 
-	; Install a Real-Mode installation check mechanism in a paragraph of convmem
-	mov	ax,0100h	; allocate dos memory block
-	mov	bx,1		; one paragraph
+	; Install a Real-Mode installation checker on int 2Fh
+	mov	ax,0200h	; get rm interrupt vector
+	mov	bl,2Fh
 	int	31h
+	mov	[old_rmint2f],edx
+	mov	word ptr [old_rmint2f+2],cx
+
+	mov	ax,0303h	; allocate rm callback
+	push	cs
+	pop	ds
+	mov	esi,offset instcheck
+	mov	edi,offset instch_callstr
+	int	31h
+	push	es
+	pop	ds
 	jc	skip_tplsinstcheck	; we've come too far to abort completely...
 
-	mov	[instcheck_sel],dx
-	push	es
-	mov	es,dx
-	xor	edi,edi
-	mov	esi,offset instcheck_sig
-	mov	ecx,4
-	rep	movsd		; four dwords = one paragraph
-	pop	es
+	mov	ax,0201h	; set rm interrupt vector
+	mov	bl,2Fh
+	int	31h
 
 skip_tplsinstcheck:
 	mov	edx,offset savingvecs
@@ -321,6 +331,42 @@ failure:
 
 ; ===== RESIDENT CODE =====
 
+; ==========================
+; == INSTALLATION CHECKER ==
+; == (Call from Real Mode)==
+; ==========================
+instcheck:
+	; Check for AH = CEh (an application-reserved function not on RBrown's list)
+	; And AL:BL:CL:DL = "TPLS"
+	cmp	word ptr [es:edi+rmcall._eax],0CE00h+'T'
+	jne	instcheck_passthrough
+	cmp	byte ptr [es:edi+rmcall._ebx],'P'
+	jne	instcheck_passthrough
+	cmp	byte ptr [es:edi+rmcall._ecx],'L'
+	jne	instcheck_passthrough
+	cmp	byte ptr [es:edi+rmcall._edx],'S'
+	jne	instcheck_passthrough
+
+	; Output is AL:BL:CL:DL = "PluM", all upper bytes zeroed
+	mov	[es:edi+rmcall._eax],'P'
+	mov	[es:edi+rmcall._ebx],'l'
+	mov	[es:edi+rmcall._ecx],'u'
+	mov	[es:edi+rmcall._edx],'M'
+
+	; Simulate an iret
+	add	[es:edi+rmcall._sp],6
+	lodsd	; copy dword from rm stack @ DS:ESI to rm call struct's CS:IP field @ ES:EDI
+	jmp	instcheck_setretaddr
+
+instcheck_passthrough:
+	; Resume Real Mode execution at old int 2F vector
+	mov	eax,[cs:old_rmint2f]
+instcheck_setretaddr:
+	mov	dword ptr [es:edi+rmcall._ip],eax
+	iretd
+
+
+
 ; ======================
 ; == INT 21H HANDLERS ==
 ; ======================
@@ -351,8 +397,8 @@ do_exithack:
 restore_excvec_loop:
 	mov	edx,[cs:esi]
 	mov	cx,[cs:esi+4]
-	int	31h
-	jc	restore_intvecs	; exceptions not supported by this host...
+	; int	31h
+	; jc	restore_intvecs	; exceptions not supported by this host...
 	sub	esi,6
 	dec	bl
 	jns	restore_excvec_loop
@@ -372,24 +418,15 @@ restore_intvec_loop:
 	jnz	restore_intvec_loop
 
 	; get rid of our installation check too...
-	mov	dx,[cs:instcheck_sel]
-	test	dx,dx
-	jz	skip_remove_instcheck
-
-	push	es
-	push	edi
-	mov	es,dx
-	xor	eax,eax
-	xor	edi,edi
-	mov	ecx,4
-	rep	stosd		; zero out four dwords = one paragraph
-	pop	edi
-	pop	es
-
-	mov	ax,0101h	; free dos memory block
+	; TODO: This doesn't work under Rayman!
+	; PMODE/W "restores" the entire RM IVT *after* termination...
+	; Need to come up with a non-IVT-related instcheck mechanism
+	mov	edx,[cs:old_rmint2f]
+	mov	ecx,[cs:old_rmint2f+2]
+	mov	ax,0201h	; set rm interrupt vector
+	mov	bl,2Fh
 	int	31h
 
-skip_remove_instcheck:
 	mov	edx,offset final_warning
 	mov	ah,9		; print message - safe to do this under DOS32 (and PMODE/W for that matter!)
 	pushfd
@@ -1399,7 +1436,7 @@ no_introtrackno:
 	mov	edx,[pMoskitoSlow]
 	call	set_hookpoint
 
-	; Hooks to make the PC version use CD audio where it normally doesn't
+	; Hookks to make the PC version use CD audio where it normally doesn't
 	; (but other versions normally do)
 	; Actually, screw the exit-sign one. Not only does the fanfare always get
 	; cut off for an actual exit sign, but it also gets engaged for certain

@@ -3,14 +3,6 @@
 .STACK	80h
 OPTION	MZ:	0:16:0:0	; zeros to minimize all allocations (make room for Rayman and TSR)
 
-MCB	struc
-	sig	db ?
-	psp	dw ?
-	mcbsize	dw ?
-	_res	db 3 dup (?)
-	pname	dq ?
-MCB	ends
-
 .CODE
 entry:
 	push	cs
@@ -60,9 +52,19 @@ hide_vcpi:
 
 no_vcpi:
 	; Check if TPLS is already installed
-	call	check_tpls_installed
-	test	ax,ax
-	jnz	tsr_installed
+	mov	ax,0CE00h + 'T'
+	mov	bl,'P'
+	mov	cl,'L'
+	mov	dl,'S'
+	int	2Fh
+	cmp	al,'P'
+	jne	install_tsr
+	cmp	bl,'l'
+	jne	install_tsr
+	cmp	cl,'u'
+	jne	install_tsr
+	cmp	dl,'M'
+	je	tsr_installed
 
 install_tsr:
 	mov	ax,4B00h	; exec and load
@@ -135,51 +137,6 @@ finish:
 	int	21h
 
 
-check_tpls_installed:
-	push	es
-	push	bx
-	mov	ah,52h		; get sysvars
-	int	21h
-
-	mov	es,[es:bx-2]	; first MCB
-mcb_check_loop:
-	cmp	[es:MCB.mcbsize],1
-	jne	next_mcb
-	push	si
-	push	di
-	push	cx
-	mov	si,offset instcheck_sig
-	mov	di,10h
-	mov	cx,8
-	repe	cmpsw
-	pop	cx
-	pop	di
-	pop	si
-	jne	next_mcb
-
-	pop	bx
-	pop	es
-	mov	ax,1		; it's there!
-	ret
-
-next_mcb:
-	cmp	[es:MCB.sig],'M'
-	jne	nomore_mcbs
-
-	mov	bx,es
-	add	bx,[es:MCB.mcbsize]
-	inc	bx
-	mov	es,bx
-	jmp	mcb_check_loop
-
-nomore_mcbs:
-	; We didn't find the TPLS signature, so it's not there
-	pop	bx
-	pop	es
-	xor	ax,ax
-	ret
-
-
 vcpi_hider:
 	cmp	ax,0DE00h	; VCPI installation check
 	je	vcpi_hider_ret
@@ -200,7 +157,6 @@ vcpi_hider_ret:
 	failed_tsr_msg	db "Couldn't exec ",TSR_EXE_DEF," - is it in the right directory?",0Dh,0Ah,'$'
 	failed_ray_msg	db "Couldn't exec ",RAY_EXE_DEF," - is it in the right directory?",0Dh,0Ah
 			db "Note TPLS is resident anyway, so you can try running Rayman directly now",0Dh,0Ah,'$'
-	instcheck_sig	db "PluM's TPLS TSR",0	; TSR's signature in conventional memory
 
 	; exec parameters
 	wEnvSeg		dw 0	; copy parent environment

@@ -395,18 +395,24 @@ do_exithack:
 	; if this is Rayman, then we need to forget his PSP
 	; so when he runs again, we'll re-do all our setup
 	push	ds
-	mov	ds,[cs:mydatasel]
-	call	get_psp
-	jne	exithack_notrayman
-	mov	[raymanpsp],0
-
-exithack_notrayman:
 	push	eax
 	push	ebx
 	push	ecx
 	push	edx
 	push	esi
 
+	mov	ds,[cs:mydatasel]
+	xor	bx,bx
+	call	get_psp
+	jne	exithack_notrayman
+	mov	[raymanpsp],bx
+
+	; forget Rayman's CS base and limit too!
+	xchg	bx,[rayman_cs_asds]
+	mov	ax,1		; free LDT selector
+	int	31h
+
+exithack_notrayman:
 	; restore exception vectors...
 	mov	ax,0203h	; set exception handler
 	mov	bl,1Fh

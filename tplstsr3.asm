@@ -143,7 +143,7 @@ exception_stackframe ENDS
 	intro		db "Welcome to ",33o,"[35mP",33o,"[95ml",33o,"[35mu",33o,"[95mM",33o,"[35m'",33o,"[95ms",33o,"[37m TPLS TSR!",13,10,13,10
 			db "Checking for DPMI...",13,10,"$"
 	NODPMI_EXPLAIN	equ "In VCPI/raw mode, I can't guarantee continuity of int 31h from DOS32 to PMODE/W.",13,10,"$"
-	nodpmi		db "DOS32 not using DPMI. Please run under Windows or install a DPMI host.",13,10,NODPMI_EXPLAIN
+	nodpmi		db "DOS32 not using DPMI. Please run under a Win9x/3.x VDM or install a DPMI host.",13,10,NODPMI_EXPLAIN
 	vcpimode	db "DOS32 using VCPI. Please use TPLSWRAP.EXE to make it use DPMI instead.",13,10,NODPMI_EXPLAIN
 	dpmiok		db "DPMI available! Preparing to go resident...",13,10,"$"
 	nogphandler	db "Couldn't install General Protection Fault handler.",13,10
@@ -392,8 +392,6 @@ int21_exithack:
 	jmp	cs:dos32_int21	; simple passthrough
 
 do_exithack:
-	; if this is Rayman, then we need to forget his PSP
-	; so when he runs again, we'll re-do all our setup
 	push	ds
 	push	eax
 	push	ebx
@@ -401,6 +399,8 @@ do_exithack:
 	push	edx
 	push	esi
 
+	; if this is Rayman, then we need to forget his PSP
+	; so when he runs again, we'll re-do all our setup
 	mov	ds,[cs:mydatasel]
 	xor	bx,bx
 	call	get_psp

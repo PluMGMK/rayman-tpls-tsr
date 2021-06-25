@@ -13,15 +13,46 @@ entry:
 	mov	word ptr [pfrFCB_1+2],es
 	mov	word ptr [pfrFCB_2+2],es
 
-	; Check for VCPI
+	; Check for EMS - precursor to VCPI check...
 	mov	ax,3567h	; get interrupt vector 67h
 	int	21h
 	mov	word ptr [ems_vec],bx
 	mov	word ptr [ems_vec+2],es
 
-	; TODO: Check for DPMI and invoke CWSDPMI if necessary and possible
+	; Check for DPMI
+	mov	ax,1687h	; DPMI check
+	int	2Fh
+	test	ax,ax
+	jnz	start_dpmi
+	test	bx,1		; 32-bit support?
+	jnz	have_dpmi
 
-	or	bx,word ptr [ems_vec+2]
+start_dpmi:
+	mov	ax,4B00h	; exec and load
+	mov	dx,offset dpmi_exe
+	push	ds
+	pop	es
+	mov	bx,offset wEnvSeg
+	mov	word ptr [orig_stack],sp
+	mov	word ptr [orig_stack+2],ss
+	int	21h		; execute the TSR
+	; restore the stack after the exec call:
+	mov	ss,word ptr [cs:orig_stack+2]
+	mov	sp,word ptr [cs:orig_stack]
+	; and the data segment
+	push	cs
+	pop	ds
+
+	jc	failed_dpmi_exec
+	mov	ah,4Dh		; get exit code
+	int	21h
+	cmp	ah,3		; TSR-ed
+	jne	failed_dpmi_exec
+
+have_dpmi:
+	.386			; if 32-bit DPMI is available, it means we're at least on a 386
+	mov	ebx,[ems_vec]
+	test	ebx,ebx
 	jz	no_vcpi		; vector is null
 
 	; Before actually checking for VCPI, check for Windows 3.0
@@ -111,6 +142,11 @@ tsr_installed:
 	mov	[exit_code],0
 	jmp	finish
 	
+failed_dpmi_exec:
+	.8086			; if we're here, we may not be on a 386
+	mov	dx,offset failed_dpmi_msg
+	jmp	failure_msg
+	
 failed_tsr_exec:
 	mov	dx,offset failed_tsr_msg
 	jmp	failure_msg
@@ -151,12 +187,18 @@ vcpi_hider_ret:
 .DATA
 	TSR_EXE_DEF	equ "TPLSTSR3.EXE"
 	RAY_EXE_DEF	equ "RAYMAN.EXE"
+	DPMI_EXE_DEF	equ "CWSDPMI.EXE"
 	tsr_exe		db TSR_EXE_DEF,0
 	ray_exe		db RAY_EXE_DEF,0
+	dpmi_exe	db DPMI_EXE_DEF,0
 
 	failed_tsr_msg	db "Couldn't exec ",TSR_EXE_DEF," - is it in the right directory?",0Dh,0Ah,'$'
 	failed_ray_msg	db "Couldn't exec ",RAY_EXE_DEF," - is it in the right directory?",0Dh,0Ah
 			db "Note TPLS is resident anyway, so you can try running Rayman directly now",0Dh,0Ah,'$'
+	failed_dpmi_msg	db "No 32-bit DPMI available, and couldn't exec ",DPMI_EXE_DEF,".",0Dh,0Ah
+			db "Note that this doesn't scan PATH, so you may need to run it manually.",0Dh,0Ah
+			db "You can also start a different DPMI host of your choice, or else run in a VDM",0Dh,0Ah
+			db "under Windows 9x or Windows 3.x in Enhanced Mode.",0Dh,0Ah,"$"
 
 	; exec parameters
 	wEnvSeg		dw 0	; copy parent environment

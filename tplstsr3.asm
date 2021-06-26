@@ -1949,7 +1949,7 @@ gp_xortable:
 	jmp	short gp_resumenext
 	xor	esp,esp
 	jmp	short gp_resumenext
-	xor	ebp,ebp
+	xor	eax,eax
 	jmp	short gp_setebp
 	xor	esi,esi
 	jmp	short gp_setesi
@@ -1960,7 +1960,7 @@ gp_setesi:
 	mov	[esp+4],esi
 	jmp	short gp_resumenext
 gp_setebp:
-	mov	[esp+0Ch],ebp
+	mov	[esp+0Ch],eax
 	jmp	short gp_resumenext
 gp_seteax:
 	mov	[esp],eax

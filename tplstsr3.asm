@@ -159,6 +159,7 @@ exception_stackframe ENDS
 
 	; Rayman version strings
 	ray121us	db "RAYMAN (US) v1.21"
+	ray112us	db "RAYMAN (US) v1.12"
 	ray120de	db "RAYMAN (GERMAN) v1.20"
 	ray112eu	db "RAYMAN (EU) v1.12"
 
@@ -948,6 +949,13 @@ rayman_vercheck:
 	repe	cmpsb
 	je	setup_ptrs_v121us
 
+	; Check for version 1.12 US
+	mov	esi,offset ray112us
+	mov	edi,offset entete_buf
+	mov	ecx,sizeof ray112us
+	repe	cmpsb
+	je	setup_ptrs_v112us
+
 	; Check for version 1.20 German
 	mov	esi,offset ray120de
 	mov	edi,offset entete_buf
@@ -1036,6 +1044,77 @@ setup_ptrs_v121us:
 	mov	[pPerdu],esi		; @ 0xCF8E in the text section
 	lea	esi,[edi-(79B9Dh-1A710h)]
 	mov	[pPlayTrack],esi	; @ 0x1A710 in the text section
+
+	jmp	common_tracktable_setup
+
+setup_ptrs_v112us:
+	; TODO: These pointers are correct for the "UNPROTECTED" version I have.
+	; Is there a "PROTECTED" version that might have different pointers?
+	mov	edi,[pRM_call_struct]	; @ 0x185AD8
+	lea	esi,[edi-(185AD8h-170520h)]
+	mov	[pnum_world],esi	; @ 0x170520
+	lea	esi,[edi-(185AD8h-17050Eh)]
+	mov	[pnum_level],esi	; @ 0x17050E
+	lea	esi,[edi-(185AD8h-135EF3h)]
+	mov	[ptrack_table],esi	; @ 0x135EF3
+	lea	esi,[edi-(185AD8h-135F74h)]
+	mov	[ptimeCd],esi		; @ 0x135F74
+	lea	esi,[edi-(185AD8h-16E4F4h)]
+	mov	[pcdTime],esi		; @ 0x16E4F4
+	lea	esi,[edi-(185AD8h-17F667h)]
+	mov	[prbook_table],esi	; @ 0x17F667
+	lea	esi,[edi-(185AD8h-17F7FBh)]
+	mov	[prbook_lentable],esi	; @ 0x17F7FB
+	lea	esi,[edi-(185AD8h-17FB9Bh)]
+	mov	[prbook_tablefl],esi	; @ 0x17FB9B
+	lea	esi,[edi-(185AD8h-17F661h)]
+	mov	[plowest_atrack],esi	; @ 0x17F661
+	lea	esi,[edi-(185AD8h-17F662h)]
+	mov	[phighest_atrack],esi	; @ 0x17F662
+	lea	esi,[edi-(185AD8h-1706BBh)]
+	mov	[pcd_driveletter],esi	; @ 0x1706BB
+	lea	esi,[edi-(185AD8h-1706C8h)]
+	mov	[plang],esi		; @ 0x1706C8
+
+	mov	edi,[pInt31]		; @ 0x86FD1
+	lea	esi,[edi-(86FD1h-1AC78h)]
+	mov	[pCreditsTrackNo],esi	; @ 0x1AC78
+	lea	esi,[edi-(86FD1h-1ACA0h)]
+	mov	[pLogoTrackNo],esi	; @ 0x1ACA0
+	lea	esi,[edi-(86FD1h-1AD20h)]
+	mov	[pMenuTrackNo],esi	; @ 0x1AD20
+	lea	esi,[edi-(86FD1h-1AD48h)]
+	mov	[pGOverTrackNo],esi	; @ 0x1AD48
+	lea	esi,[edi-(86FD1h-163E8h)]
+	mov	[pIntroTrackNo],esi	; @ 0x163E8
+	lea	esi,[edi-(86FD1h-333E6h)]
+	mov	[pOuttroTrackNo],esi	; @ 0x333E6
+	lea	esi,[edi-(86FD1h-284ACh)]
+	mov	[pTrackTabDone],esi	; @ 0x284AC
+	lea	esi,[edi-(86FD1h-786E0h)]
+	mov	[pDoGrowingPlat],esi	; @ 0x786E0
+	lea	esi,[edi-(86FD1h-51715h)]
+	mov	[pMoskitoLock],esi	; @ 0x51715
+	lea	esi,[edi-(86FD1h-58874h)]
+	mov	[pMoskitoFast],esi	; @ 0x58874
+	lea	esi,[edi-(86FD1h-5889Dh)]
+	mov	[pMoskitoSlow],esi	; @ 0x5889D
+	lea	esi,[edi-(86FD1h-14FE0h)]
+	mov	[pLevelStart1],esi	; @ 0x14FE0
+	lea	esi,[edi-(86FD1h-156DAh)]
+	mov	[pLevelStart2],esi	; @ 0x156DA
+	lea	esi,[edi-(86FD1h-1557Bh)]
+	mov	[pLevelEnd1],esi	; @ 0x1557B
+	lea	esi,[edi-(86FD1h-15B7Eh)]
+	mov	[pLevelEnd2],esi	; @ 0x15B7E
+	lea	esi,[edi-(86FD1h-5FD2Fh)]
+	mov	[pExitSign1],esi	; @ 0x5FD2F
+	lea	esi,[edi-(86FD1h-5FE8Ch)]
+	mov	[pExitSign2],esi	; @ 0x5FE8C
+	lea	esi,[edi-(86FD1h-1ACBEh)]
+	mov	[pPerdu],esi		; @ 0x1ACBE
+	lea	esi,[edi-(86FD1h-282C4h)]
+	mov	[pPlayTrack],esi	; @ 0x282C4
 
 	jmp	common_tracktable_setup
 

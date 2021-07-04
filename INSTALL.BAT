@@ -37,7 +37,7 @@ type C:\RAYMAN.BAT | find /I /V "tplswrap.exe" > C:\TPLSTMP.BAT
 rem Now C:\TPLSTMP.BAT contains every line from C:\RAYMAN.BAT except the one
 rem that actually launches Rayman - in other words, enough to get us to Rayman's
 rem directory!
-cd | sed16bin\sed "s/^/set olddir=/" >> C:\TPLSTMP.BAT
+cd | sed16bin\sed -e "s/^/set olddir=/" -e "s/\\$//" >> C:\TPLSTMP.BAT
 rem Now we've completed it, so it includes a final line "set olddir=<our cwd>"!
 
 C:

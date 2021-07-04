@@ -28,7 +28,7 @@ However, it also means that unlike the other implementations, a custom CD image 
 
 * Make sure your Rayman version is supported (see above table) – if not, please let me know and I'll see what I can do!
 * Download and extract a release from the [releases page](https://github.com/PluMGMK/rayman-tpls-tsr/releases).
-* Change the `IMGMOUNT` command in the `autoexec` section of your config file to mount the `TPLSDBOX.CUE` file, rather than the game's original CD image.
+* Change the `IMGMOUNT` command in the `autoexec` section of your config file to mount the `tplstsr3.cue` file, rather than the game's original CD image.
 * Replace the invocation of `RAYMAN.EXE` in the `autoexec` section with `TPLSWRAP.EXE`.
 * Copy `TPLSTSR3.EXE` and `TPLSWRAP.EXE` from the release into the same folder as your `RAYMAN.EXE`.
 * You will probably also need a DPMI host – download [CWSDPMI](http://sandmann.dotster.com/cwsdpmi/csdpmi7b.zip) and extract `CWSDPMI.EXE` into the same folder as the other two files.
@@ -38,8 +38,9 @@ However, it also means that unlike the other implementations, a custom CD image 
 
 * Make sure your Rayman version is supported (see above table) – if not, please let me know and I'll see what I can do!
 * Download and extract a release from the [releases page](https://github.com/PluMGMK/rayman-tpls-tsr/releases).
-* Use the `TPLSBURN.CUE` and `TPLS.BIN` files to burn a CD-R – it should be possible to do this with `cdrdao` on Linux, or perhaps [ImgBurn](https://www.imgburn.com/) on Windows.
+* Use the `tplstsr3.cue` (or `tplstsr3.toc`) and `tplstsr3.bin` files to burn a CD-R – it should be possible to do this with `cdrdao` on Linux, or perhaps [ImgBurn](https://www.imgburn.com/) on Windows.
   * I may update this documentation with more specific instructions in the future!
+  * Note that the copy of this README on the CD is already out of date on this point! But if you get far enough to have a CD, you should be reading the up-to-date one anyway. :)
 * Insert the new CD into your PC running DOS or Windows, and run `INSTALL.BAT`.
 * If you're running pure DOS (no Windows 3.x / 9x or OS/2), and don't have a DPMI host (or don't know what that is), you will again probably need to download [CWSDPMI](http://sandmann.dotster.com/cwsdpmi/csdpmi7b.zip) and extract `CWSDPMI.EXE` into the same folder as `RAYMAN.EXE`.
 * Run `C:\RAYMAN.BAT` and enjoy TPLS!

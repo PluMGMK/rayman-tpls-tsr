@@ -162,6 +162,7 @@ exception_stackframe ENDS
 	ray112us	db "RAYMAN (US) v1.12"
 	ray120de	db "RAYMAN (GERMAN) v1.20"
 	ray112eu	db "RAYMAN (EU) v1.12"
+	ray120itspdu	db "RAYMAN (IT-SP-DU) v1.20"
 
 	; Files that Rayman may look for on the CD
 	filechecked1	db ":\rayman\rayman.exe",0
@@ -970,6 +971,13 @@ rayman_vercheck:
 	repe	cmpsb
 	je	setup_ptrs_v112eu
 
+	; Check for version 1.20 IT-SP-DU
+	mov	esi,offset ray120itspdu
+	mov	edi,offset entete_buf
+	mov	ecx,sizeof ray120itspdu
+	repe	cmpsb
+	je	setup_ptrs_v120itspdu
+
 	; TODO: Check for other versions (maybe)
 	push	edx
 	mov	edx,offset unkver
@@ -1117,6 +1125,75 @@ setup_ptrs_v112us:
 	mov	[pPlayTrack],esi	; @ 0x282C4
 
 	jmp	common_tracktable_setup
+
+setup_ptrs_v120itspdu:
+	mov	edi,[pRM_call_struct]	; @ 0x185EC8
+	lea	esi,[edi-(185EC8h-17091Ch)]
+	mov	[pnum_world],esi	; @ 0x17091C
+	lea	esi,[edi-(185EC8h-17090Ch)]
+	mov	[pnum_level],esi	; @ 0x17090C
+	lea	esi,[edi-(185EC8h-135F0Bh)]
+	mov	[ptrack_table],esi	; @ 0x135F0B
+	lea	esi,[edi-(185EC8h-135F8Ch)]
+	mov	[ptimeCd],esi		; @ 0x135F8C
+	lea	esi,[edi-(185EC8h-16E8ECh)]
+	mov	[pcdTime],esi		; @ 0x16E8EC
+	lea	esi,[edi-(185EC8h-17F957h)]
+	mov	[prbook_table],esi	; @ 0x17F957
+	lea	esi,[edi-(185EC8h-17FAEBh)]
+	mov	[prbook_lentable],esi	; @ 0x17FAEB
+	lea	esi,[edi-(185EC8h-17FF8Eh)]
+	mov	[prbook_tablefl],esi	; @ 0x17FF8E
+	lea	esi,[edi-(185EC8h-17F951h)]
+	mov	[plowest_atrack],esi	; @ 0x17F951
+	lea	esi,[edi-(185EC8h-17F952h)]
+	mov	[phighest_atrack],esi	; @ 0x17F952
+	lea	esi,[edi-(185EC8h-170AB7h)]
+	mov	[pcd_driveletter],esi	; @ 0x170AB7
+	lea	esi,[edi-(185EC8h-170AC5h)]
+	mov	[plang],esi		; @ 0x170AC5
+
+	mov	edi,[pInt31]		; @ 0x880B9
+	lea	esi,[edi-(880B9h-1AED8h)]
+	mov	[pCreditsTrackNo],esi	; @ 0x1AED8
+	lea	esi,[edi-(880B9h-1AF00h)]
+	mov	[pLogoTrackNo],esi	; @ 0x1AF00
+	lea	esi,[edi-(880B9h-1AF80h)]
+	mov	[pMenuTrackNo],esi	; @ 0x1AF80
+	lea	esi,[edi-(880B9h-1AFA8h)]
+	mov	[pGOverTrackNo],esi	; @ 0x1AFA8
+	lea	esi,[edi-(880B9h-16521h)]
+	mov	[pPlayIntro],esi	; @ 0x16521
+	lea	esi,[edi-(880B9h-33805h)]
+	mov	[pPlayOuttro],esi	; @ 0x33805
+	lea	esi,[edi-(880B9h-28848h)]
+	mov	[pTrackTabDone],esi	; @ 0x28848
+	lea	esi,[edi-(880B9h-79640h)]
+	mov	[pDoGrowingPlat],esi	; @ 0x79640
+	lea	esi,[edi-(880B9h-51D35h)]
+	mov	[pMoskitoLock],esi	; @ 0x51D35
+	lea	esi,[edi-(880B9h-58E94h)]
+	mov	[pMoskitoFast],esi	; @ 0x58E94
+	lea	esi,[edi-(880B9h-58EBDh)]
+	mov	[pMoskitoSlow],esi	; @ 0x58EBD
+	lea	esi,[edi-(880B9h-14FF0h)]
+	mov	[pLevelStart1],esi	; @ 0x14FF0
+	lea	esi,[edi-(880B9h-156F6h)]
+	mov	[pLevelStart2],esi	; @ 0x156F6
+	lea	esi,[edi-(880B9h-15597h)]
+	mov	[pLevelEnd1],esi	; @ 0x15597
+	lea	esi,[edi-(880B9h-15BA6h)]
+	mov	[pLevelEnd2],esi	; @ 0x15BA6
+	lea	esi,[edi-(880B9h-6034Fh)]
+	mov	[pExitSign1],esi	; @ 0x6034F
+	lea	esi,[edi-(880B9h-604ACh)]
+	mov	[pExitSign2],esi	; @ 0x604AC
+	lea	esi,[edi-(880B9h-1AF1Eh)]
+	mov	[pPerdu],esi		; @ 0x1AF1E
+	lea	esi,[edi-(880B9h-28660h)]
+	mov	[pPlayTrack],esi	; @ 0x28660
+
+	jmp	common_filespoof_setup
 
 setup_ptrs_v120de:
 	mov	edi,[pRM_call_struct]	; @ 0x185EC8
@@ -1737,7 +1814,7 @@ hook_handler:
 	sub	dword ptr [esp],2	; rewind to before the int 0F5h instruction
 	push	ebp
 	lea	ebp,[esp+4]		; convenient pointer to stack frame
-	push	ds			; this pushes a dword on the stack??
+	push	ds			; yes PluM, in 32-bit mode, segment pushes are 32 bits...
 	mov	ds,[cs:mydatasel]	; our own data are of interest now!
 
 	push	eax

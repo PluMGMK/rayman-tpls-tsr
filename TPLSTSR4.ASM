@@ -150,6 +150,7 @@ hmidrv_buffer	db BUFSIZE dup (?)
 ; Bit 1 = HMIDRV.386 redirect active
 ; Bit 2 = Other file redirects active (for DRM)
 ; Bit 3 = Payload active
+; Bit 4 = Hookpoints dirty
 statusword	dw 0
 
 first_cddrv	db 0
@@ -1083,6 +1084,8 @@ tpls_int2f	proc
 	bt	cs:[statusword],3	; payload active?
 	jnc	@F
 
+	btr	cs:[statusword],4	; need to run the callback?
+	jnc	@@passthrough
 	; the payload sets this when it activates
 	jmp	cs:callback2payload
 	; and the callback itself will send us to old_int2f when it's done
@@ -2003,6 +2006,9 @@ clear_hookpoint	endp
 ; void __fastcall change_music(char newtrack);
 ; Changes the music track (and corresponding length) for the current level and plays
 change_music	proc near
+	assume	ds:payload	; always called from inside the hook handler...
+	; Also, without this assume line, the assembler generates crashing code!
+
 	push	edx
 	push	ecx
 	push	ebx
@@ -2021,7 +2027,7 @@ change_music	proc near
 	mov	edx,[ptrack_table]
 	mov	cl,al
 	lea	edx,[edx+ebx]
-	xchg	[es:edx],cl
+	xchg	es:[edx],cl
 	mov	[tra_to_restore],cl
 	mov	[ptra_to_restore],edx
 
@@ -2058,6 +2064,8 @@ change_music	endp
 ; == HANDLER for our hooking mechanism on int F5 ==
 ; =================================================
 hook_handler	proc
+	assume	ds:nothing		; we're coming from Rayman's code
+
 	sub	dword ptr [esp],2	; rewind to before the int 0F5h instruction
 	push	ebp
 	lea	ebp,[esp+4]		; convenient pointer to stack frame
@@ -2072,6 +2080,14 @@ hook_handler	proc
 	mov	eax,[ebp]		; the return addx
 	call	hook_find
 	call	hook_deactivate
+
+	; we'll want the hookpoint reactivated on the next MSCDEX call
+	push	gs
+	call	get_stub_seg
+	assume	gs:stub
+	bts	gs:[statusword],4
+	pop	gs
+	assume	gs:nothing
 
 	cmp	eax,[pLevelStart1]
 	je	@@now_in_level

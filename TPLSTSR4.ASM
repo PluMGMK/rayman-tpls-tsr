@@ -441,7 +441,6 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[pLogoTrackNo],(0CF70h-73D6Dh)	; @ 0xCF70 in the text section
 	mov	gs:[pMenuTrackNo],(0CFF0h-73D6Dh)	; @ 0xCFF0 in the text section
 	mov	gs:[pGOverTrackNo],(0D018h-73D6Dh)	; @ 0xD018 in the text section
-	mov	gs:[pTrackTabDone],(1A8F8h-73D6Dh)	; @ 0x1A8F8 in the text section
 	mov	gs:[pDoGrowingPlat],(6B1A0h-73D6Dh)	; @ 0x6B1A0 in the text section
 	mov	gs:[pMoskitoLock],(43D35h-73D6Dh)	; @ 0x43D35 in the text section
 	mov	gs:[pMoskitoFast],(4AE94h-73D6Dh)	; @ 0x4AE94 in the text section
@@ -484,7 +483,6 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[pGOverTrackNo],(1AD48h-81216h)	; @ 0x1AD48
 	mov	gs:[pIntroTrackNo],(163E8h-81216h)	; @ 0x163E8
 	mov	gs:[pOuttroTrackNo],(333E6h-81216h)	; @ 0x333E6
-	mov	gs:[pTrackTabDone],(284ACh-81216h)	; @ 0x284AC
 	mov	gs:[pDoGrowingPlat],(786E0h-81216h)	; @ 0x786E0
 	mov	gs:[pMoskitoLock],(51715h-81216h)	; @ 0x51715
 	mov	gs:[pMoskitoFast],(58874h-81216h)	; @ 0x58874
@@ -524,7 +522,6 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[pGOverTrackNo],(1AFA8h-821FFh)	; @ 0x1AFA8
 	mov	gs:[pPlayIntro],(16521h-821FFh)		; @ 0x16521
 	mov	gs:[pPlayOuttro],(33805h-821FFh)	; @ 0x33805
-	mov	gs:[pTrackTabDone],(28848h-821FFh)	; @ 0x28848
 	mov	gs:[pDoGrowingPlat],(79640h-821FFh)	; @ 0x79640
 	mov	gs:[pMoskitoLock],(51D35h-821FFh)	; @ 0x51D35
 	mov	gs:[pMoskitoFast],(58E94h-821FFh)	; @ 0x58E94
@@ -566,7 +563,6 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[pGOverTrackNo],(1AFA8h-8220Fh)	; @ 0x1AFA8
 	mov	gs:[pPlayIntro],(16521h-8220Fh)		; @ 0x16521
 	mov	gs:[pPlayOuttro],(33805h-8220Fh)	; @ 0x33805
-	mov	gs:[pTrackTabDone],(28848h-8220Fh)	; @ 0x28848
 	mov	gs:[pDoGrowingPlat],(79650h-8220Fh)	; @ 0x79650
 	mov	gs:[pMoskitoLock],(51D45h-8220Fh)	; @ 0x51D45
 	mov	gs:[pMoskitoFast],(58EA4h-8220Fh)	; @ 0x58EA4
@@ -608,7 +604,6 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[pGOverTrackNo],(1AE78h-81508h)	; @ 0x1AE78
 	mov	gs:[pIntroTrackNo],(1651Eh-81508h)	; @ 0x1651E
 	mov	gs:[pOuttroTrackNo],(33546h-81508h)	; @ 0x33546
-	mov	gs:[pTrackTabDone],(285C0h-81508h)	; @ 0x285C0
 	mov	gs:[pDoGrowingPlat],(789E0h-81508h)	; @ 0x789E0
 	mov	gs:[pMoskitoLock],(51105h-81508h)	; @ 0x51105
 	mov	gs:[pMoskitoFast],(58264h-81508h)	; @ 0x58264
@@ -1161,14 +1156,15 @@ payload	segment use32
 	push	ebx
 	push	ecx
 	push	edx
+	push	esi
 
 	push	es
+	push	ds
 	mov	ax,35F5h; get interrupt vector
 	int	21h
 	mov	[old_intF5_off],ebx
 	mov	[old_intF5_seg],es
 
-	push	ds
 	; install our hook function
 	mov	ax,25F5h; set interrupt vector
 	push	cs
@@ -1178,13 +1174,13 @@ payload	segment use32
 	
 	mov	ax,303h	; allocate RM callback
 	mov	esi,offset callback_fromstub
-	push	ds
-	pop	es
+	pop	es	; get saved DS from stack
 	mov	edi,offset callback_RMCS
 	int	31h
 	mov	gs:[callback_off],dx
 	mov	gs:[callback_seg],cx
 
+	push	es	; restore DS to what it was
 	pop	ds
 	pop	es
 
@@ -1220,6 +1216,7 @@ payload	segment use32
 @@:
 	mov	[rayman_cs_asds],ax
 
+	pop	esi
 	pop	edx
 	pop	ecx
 	pop	ebx
@@ -1524,6 +1521,7 @@ setup_tracknos	endp
 ; write all the correct TPLS track lengths into the level track length table,
 ; assuming setup_tracknos has already been called
 setup_tracklens	proc near	uses es edi esi edx ecx ebx eax ebp
+	mov	es,[rayman_ds]
 	mov	esi,[ptrack_table]
 	mov	edi,[ptimeCd]
 	mov	ebp,[prbook_lentable]
@@ -1790,7 +1788,6 @@ pIntroTrackNo	dd 0	; For multi-lang versions, intro/outtro track number is a
 pOuttroTrackNo	dd 0	;  fixed offset of the language ID - edit this fixed offset
 pPlayIntro	dd 0	; For single-lang versions, intro/outtro track number is fixed,
 pPlayOuttro	dd 0	;  so we inject our own code to calculate from the lang value
-pTrackTabDone	dd ?	; End of the track table population function
 pDoGrowingPlat	dd ?
 pMoskitoLock	dd ?	; Where Moskito locks the screen to begin the boss fight
 pMoskitoFast	dd ?	; Rayman's riding on a mosquito that starts moving fast

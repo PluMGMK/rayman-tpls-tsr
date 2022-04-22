@@ -1,5 +1,0 @@
-sed16bin.zip - HHsed, ver 1.6 binaries
-16-bit and 32-bit versions of GNU sed, as
-issued by Howard Helman & Walter Briscoe.
-Fixes all the bugs in SED15, and supports
-$1..$9 as word tokens like awk.

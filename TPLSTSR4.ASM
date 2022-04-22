@@ -151,7 +151,11 @@ hmidrv_buffer	db BUFSIZE dup (?)
 ; Bit 2 = Other file redirects active (for DRM)
 ; Bit 3 = Payload active
 ; Bit 4 = Hookpoints dirty
+; Bit 5 = EMS state saved
 statusword	dw 0
+
+emshdl		dw 0
+pageframe	dw 0
 
 first_cddrv	db 0
 endof_cddrv	db 0
@@ -176,6 +180,7 @@ fake_exes	db "NUL",0	; can always be opened!
 rayman_banner	db 'R',1Eh,'A',1Eh,'Y',1Eh,'M',1Eh,'A',1Eh,'N',1Eh
 
 ; Warning / error messages
+emserr		db 33o,"[35m","EMS error occurred. Unable to proceed with payload injection...",33o,"[37m",13,10,"$"
 noextratracks	db 33o,"[35m","Warning: CD in drive "
 noextratracks_letter db ?,": does not have intro/outtro tracks.",13,10
 		db "Intro and/or outtro cutscenes may be silent!",33o,"[37m",13,10,"$"
@@ -248,18 +253,73 @@ chk_entete	proc near	uses ax cx ds si es di
 	ret
 chk_entete	endp
 
+; Map our payload into the page frame
+; Returns status in CF, map location in AX
+map_payload_seg	proc far	uses bx dx
+	mov	ax,4400h; map logical page into first physical page
+	xor	bx,bx	; first and only logical page in our handle
+	mov	dx,cs:[emshdl]
+	int	67h
+	test	ah,ah
+	jnz	@@failure
+
+	mov	ax,cs:[pageframe]
+	clc
+	ret
+
+@@failure:
+	stc
+	ret
+map_payload_seg	endp
+
 ; Get the payload segment into GS
+; CF set if an EMS error occurred
 get_payload_seg	proc near	uses ax
 	bt	cs:[statusword],0
 	jc	@F
 
 	mov	ax,payload
+@@success:
 	mov	gs,ax
+	; CF should be clear here due to BT above, or JNC below
 	ret
 
 @@:
-	; TODO: EMS implementation!
+	bts	cs:[statusword],5
+	jc	@F	; state already saved
+
+	mov	ah,47h	; save page map
+	push	dx
+	mov	dx,cs:[emshdl]
+	int	67h
+	pop	dx
+	test	ah,ah
+	jz	@F
+
+	btr	cs:[statusword],5	; sets CF
+	ret
+
+@@:
+	call	map_payload_seg
+	jnc	@@success
+
+	call	restore_ems
+	btr	cs:[statusword],5	; sets CF
+	ret
 get_payload_seg	endp
+
+; restore the EMS state
+; CF set according to status
+restore_ems	proc near	uses ax dx
+	mov	ah,48h	; restore page map
+	mov	dx,cs:[emshdl]
+	int	67h
+	test	ah,ah	; clears CF
+	jz	@F
+	stc
+@@:
+	ret
+restore_ems	endp
 
 ; Takes RedBook M:S:F address in EDX and returns HSG sector in EDX
 redbook2hsg	proc near	uses ebx ecx
@@ -380,6 +440,8 @@ chk_music_redirect endp
 
 setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	call	get_payload_seg
+	mov	dx,offset emserr
+	jc	@@earlyfail
 	assume	gs:payload
 
 	push	cs
@@ -414,12 +476,13 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	jc	@@setup_ptrs_v120itspdu
 
 	mov	dx,offset unkver
+@@earlyfail:
 	mov	ah,9	; write to stdout
 	pushf
 	call	old_int21
 
 	stc
-	ret
+	jmp	@@retpoint
 
 @@setup_ptrs_v121us:
 	; Addresses relative to sSOSDIGIInitDriver in Rayman's data section
@@ -772,6 +835,13 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	call	old_int21
 
 	clc
+@@retpoint:
+	pushf	; save CF state
+	btr	cs:[statusword],5
+	jnc	@F
+	call	restore_ems
+@@:
+	popf
 	ret
 
 @@failed_twofilesopen:
@@ -790,7 +860,7 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	call	old_int21
 	btr	[statusword],2	; unset any DRM redirections we may have set
 	stc
-	ret
+	jmp	@@retpoint
 
 	assume	gs:nothing,es:nothing,ds:nothing
 setup_payload	endp
@@ -1128,6 +1198,9 @@ stub	ends
 ; Protected-Mode code, injected into the sound driver at the first possible opportunity
 ; Kept in Conventional or Expanded Memory before injection
 payload	segment use32
+; Make sure it fits on an EMS page...
+.errnz ((end_of_payload-$) gt 4000h)
+
 	; FS error to avoid accidentally poking the sound driver...
 	assume	fs:error,ds:nothing,es:nothing,gs:nothing
 
@@ -2281,6 +2354,36 @@ payload	ends
 init	segment use16
 	assume	ds:nothing,es:nothing
 entry:
+	.8086
+	pushf
+
+	pushf
+	pop	ax
+	and	ah,0Fh	; unset upper four flags
+	push	ax
+	popf
+
+	pushf
+	pop	ax
+	and	ah,0F0h
+	cmp	ah,0F0h	; all upper flags set?
+	mov	dx,offset no386
+	je	@@exitwitherr
+
+	or	ah,0F0h	; set upper four flags
+	push	ax
+	popf
+
+	pushf
+	pop	ax
+	test	ah,0F0h	; upper flags set?
+	; As I understand it, a 386 in Real Mode will have some of them set,
+	; but a 286 in Real Mode will have none of them...
+	jz	@@exitwitherr
+
+	popf
+	.386
+
 	; Check if TPLS is already installed
 	mov	ax,0CE00h + 'T'
 	mov	bl,'P'
@@ -2370,8 +2473,51 @@ entry:
 	mov	bp,payload
 	sub	bp,bx	; we only need the stub resident
 
-	mov	dx,offset emsnotimp
-	jmp	@@exitwitherr
+	mov	ax,3567h; get EMS int vector
+	int	21h
+	mov	ax,es
+	or	ax,bx
+	mov	dx,offset noems
+	jz	@@exitwitherr
+
+	mov	ah,40h	; EMM status
+	int	67h
+	test	ah,ah
+	jnz	@@exitwitherr
+
+	mov	ah,41h	; get page frame
+	int	67h
+	test	ah,ah
+	mov	dx,offset nopageframe
+	jnz	@@exitwitherr
+	mov	fs:[pageframe],bx
+
+	mov	ah,43h	; allocate page(s)
+	mov	bx,1	; one page
+	int	67h
+	test	ah,ah
+	mov	fs:[emshdl],dx
+	mov	dx,offset emsallocerr
+	jnz	@@exitwitherr
+
+	call	map_payload_seg
+	mov	dx,offset emsmaperr
+	jc	@@exitwitherr
+	mov	es,ax
+
+	; copy payload into EMS page
+	xor	si,si
+	mov	di,si
+	mov	ax,payload
+	mov	gs,ax
+	mov	ecx,offset end_of_payload
+	add	cx,3
+	shr	cx,2
+	rep	movsd es:[di],gs:[si]
+
+	mov	dx,offset emswarn
+	mov	ah,9	; write to stdout
+	int	21h
 
 @@noems:
 	mov	dx,offset savingvecs
@@ -2425,9 +2571,16 @@ entry:
 	int	21h
 	
 messages:
+no386		db "Looks like you're trying to run this on an 80(2)86. Aborting...",0Dh,0Ah,"$"
 already		db "TPLS already resident. Aborting. You can just play Rayman.",0Dh,0Ah,"$"
 intro		db "Welcome to ",33o,"[35mP",33o,"[95ml",33o,"[35mu",33o,"[95mM",33o,"[35m'",33o,"[95ms",33o,"[37m TPLS TSR!",0Dh,0Ah,"$"
-emsnotimp	db "/E specified but EMS support not implemented yet, aborting...",0Dh,0Ah,"$"
+emswarn		db 33o,"[31mWARNING: EMS support seems to 'work' while you're playing Rayman BUT (on my PC)",0Dh,0Ah
+		db "it seems to make DOS act weird (e.g. multiple files with same name...). YMMV.",0Dh,0Ah
+		db "To be safe, it might be best to restart your PC / VM and rerun without /E...",33o,"[37m",0Dh,0Ah,"$"
+noems		db "/E specified but EMS not reported present and correct, aborting...",0Dh,0Ah,"$"
+nopageframe	db "/E specified but EMS has no page frame - this is not supported.",0Dh,0Ah,"$"
+emsallocerr	db "/E specified but unable to allocate EMS page, aborting...",0Dh,0Ah,"$"
+emsmaperr	db "/E specified but unable to map EMS page, aborting...",0Dh,0Ah,"$"
 freeenv_err	db "Couldn't free environment segment, aborting...",0Dh,0Ah,"$"
 nomscdex	db "No MSCDEX detected, aborting...",0Dh,0Ah,"$"
 savingvecs	db "Saving interrupt vectors...",0Dh,0Ah,"$"

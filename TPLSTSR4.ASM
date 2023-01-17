@@ -111,7 +111,7 @@ _SOS_DRV_DRIVERHEADER struc
 _SOS_DRV_DRIVERHEADER ends
 
 ; Real/VM86-Mode code, resident in Conventional Memory
-stub	segment use16
+stubdos	segment use16
 sos_devid	dd 999		; default (invalid) value used by Rayman
 
 LOGOTRACK	equ 12		; Ubi Soft logo track on original CD
@@ -152,6 +152,7 @@ hmidrv_buffer	db BUFSIZE dup (?)
 ; Bit 3 = Payload active
 ; Bit 4 = Hookpoints dirty
 ; Bit 5 = EMS state saved
+; Bit 6 = Running on Win9x
 statusword	dw 0
 
 emshdl		dw 0
@@ -356,44 +357,38 @@ setup_music_redirect proc near	uses ax es bx edx edi
 
 	mov	[bp.AudioTrackInfo.function],0Bh; audio track info
 	mov	[bp.AudioTrackInfo.track_number],LOGOTRACK
-	pushf
-	call	old_int2f
+	call	do_int2f
 	mov	edx,[bp.AudioTrackInfo.starting_point]
 	mov	cs:[logotrack_wrong],edx
 
 	mov	[bp.AudioTrackInfo.track_number],LOGOTRACK_REDIR
-	pushf
-	call	old_int2f
+	call	do_int2f
 	mov	edx,[bp.AudioTrackInfo.starting_point]
 	mov	cs:[logotrack_start],edx
 	call	redbook2hsg
 	mov	edi,edx
 
 	mov	[bp.AudioTrackInfo.track_number],LOGOTRACK_REDIR+1
-	pushf
-	call	old_int2f
+	call	do_int2f
 	mov	edx,[bp.AudioTrackInfo.starting_point]
 	call	redbook2hsg
 	sub	edx,edi
 	mov	cs:[logotrack_len],edx
 
 	mov	[bp.AudioTrackInfo.track_number],MENUTRACK
-	pushf
-	call	old_int2f
+	call	do_int2f
 	mov	edx,[bp.AudioTrackInfo.starting_point]
 	mov	cs:[menutrack_wrong],edx
 
 	mov	[bp.AudioTrackInfo.track_number],MENUTRACK_REDIR
-	pushf
-	call	old_int2f
+	call	do_int2f
 	mov	edx,[bp.AudioTrackInfo.starting_point]
 	mov	cs:[menutrack_start],edx
 	call	redbook2hsg
 	mov	edi,edx
 
 	mov	[bp.AudioTrackInfo.track_number],MENUTRACK_REDIR+1
-	pushf
-	call	old_int2f
+	call	do_int2f
 	mov	edx,[bp.AudioTrackInfo.starting_point]
 	call	redbook2hsg
 	sub	edx,edi
@@ -404,6 +399,23 @@ setup_music_redirect proc near	uses ax es bx edx edi
 	add	sp,((size IOCTLRW) + 1) AND (NOT 1)
 	ret
 setup_music_redirect endp
+
+; Helper function for setup_music_redirect:
+; This calls through to the real MSCDEX handler.
+; In normal DOS, this is further up the interrupt chain, so we do a far call.
+; In Windows 9x, it's a protected mode handler, so we have to invoke the interrupt again.
+do_int2f	proc near
+	bt	cs:[statusword],6	; Windows 9x
+	jc	@F
+
+	pushf
+	call	old_int2f
+	ret
+
+@@:
+	int	2Fh
+	ret
+do_int2f	endp
 
 ; Check if a PlayReq in ES:BX is pointing at an incorrect track for logo / menu music, and redirect
 chk_music_redirect proc near	uses eax
@@ -954,7 +966,7 @@ chk_suitablecd	endp
 tpls_int21	proc
 	assume	ds:nothing,es:nothing
 
-	test	cs:[statusword],110b
+	test	cs:[statusword],46h	; Win9x and/or redirects
 	jnz	@F	; redirect(s) active!
 	jmp	cs:old_int21
 
@@ -998,7 +1010,7 @@ tpls_int21	proc
 
 @@nothmidrv:
 	bt	cs:[statusword],2
-	jnc	@@passthrough
+	jnc	@@notcdredir
 
 	lodsw
 	cmp	ah,':'	; on a different drive?
@@ -1049,6 +1061,11 @@ tpls_int21	proc
 	repe	cmpsb
 	pop	si
 	je	@@redir_local
+
+@@notcdredir:
+	bt	cs:[statusword],6	; Windows 9x
+	jnc	@@passthrough
+	call	openredir_9x
 
 @@passthrough:
 	pop	ax
@@ -1113,8 +1130,9 @@ tpls_int21	proc
 	assume	ds:stub
 
 	; Bit 0 means using EMS, which doesn't change across Rayman runs.
+	; Likewise for Bit 6, meaning running on Windows 9x.
 	; Other bits reset for a new run.
-	and	[statusword],1
+	and	[statusword],41h
 
 	mov	dx,offset fakehmidrv
 	mov	ah,41h	; UNLINK
@@ -1150,7 +1168,7 @@ tpls_int2f	proc
 
 @@:
 	cmp	ah,15h	; MSCDEX call?
-	jne	@@passthrough
+	jne	@@uncond_passthrough
 	bt	cs:[statusword],3	; payload active?
 	jnc	@F
 
@@ -1191,9 +1209,15 @@ tpls_int2f	proc
 	bts	cs:[statusword],1
 
 @@passthrough:
+	bt	cs:[statusword],6	; Windows 9x
+	jc	@F
+@@uncond_passthrough:
 	jmp	cs:old_int2f
+
+@@:
+	iret	; go straight back to the hooked int 31h
 tpls_int2f	endp
-stub	ends
+stubdos	ends
 
 ; Protected-Mode code, injected into the sound driver at the first possible opportunity
 ; Kept in Conventional or Expanded Memory before injection
@@ -1227,6 +1251,7 @@ payload	segment use32
 	test	al,al	; init function?
 	jnz	@@passthrough
 	bts	gs:[statusword],3
+	mov	gs:[payload_cs],cs
 
 	push	eax
 	push	ebx
@@ -2350,6 +2375,310 @@ hook_handler	endp
 end_of_payload:
 payload	ends
 
+; Extra support code, resident when running on Windows 9x
+extra9x	segment	use16
+	assume	ds:nothing,es:nothing,fs:nothing,gs:nothing
+
+old_dbvec	label dword
+old_dbvec_off	dw ?
+old_dbvec_seg	dw ?
+
+dpmi_entry	label dword
+dpmi_entry_off	dw ?
+dpmi_entry_seg	dw ?
+
+descbuf		dq ?
+
+old_int31	label fword
+old_int31_off	dd ?
+old_int31_seg	dw ?
+
+; Allow Protected Mode stub code to call into the payload
+callback_pm	label fword
+		dd offset callback_fromstub
+payload_cs	dw ?
+
+raydetect	db 33o,"[35mRayman EXE detected, tracing instructions until DPMI entry...",0Dh,0Ah
+		db "(Apologies if you're attempting to single-step with a debugger!)",33o,"[37m",0Dh,0Ah,'$'
+intercept	db 33o,"[35mProtected Mode entry intercepted!",33o,"[37m",0Dh,0Ah,'$'
+
+openredir_9x	proc near
+	; Are we opening the current EXE?
+	call	get_cur_exe
+	assume	es:nothing
+@@:
+	lodsb
+	test	al,al
+	jz	@F
+	scasb
+	je	@B
+@@:
+	jne	@@retpoint
+
+	; If so, is it RAYMAN.EXE?
+	push	cs
+	pop	es
+	assume	es:stub
+	lea	si,[si-2]	; go back before the terminating zero
+	mov	di,offset raymanexe + sizeof raymanexe - 2
+	std
+	mov	cx,0Ah		; length of "rayman.exe"
+	
+@@:
+	lodsb
+	.if	al >= 'A' && al <= 'Z'
+	   or	al,20h	; make sure it's lowercase
+	.endif
+	scasb
+	loope	@B
+	cld
+	jne	@@retpoint
+
+	; If so, this is probably PMODE/W in Rayman
+	; Keep an eye on it...
+	push	ds
+	push	dx
+	mov	ax,cs
+	mov	ds,ax
+	mov	dx,offset raydetect
+	mov	ah,9	; write to stdout
+	int	21h
+	pop	dx
+	pop	ds
+
+	push	bp
+	mov	bp,sp
+	add	bp,0Eh		; BP+retaddr+AX+CX+DI+SI+ES = 7 words = 14 bytes
+	bts	word ptr[bp+4],8; trap flag
+	pop	bp
+	;jc	@@retpoint	; skip int1 hook if trap flag already set!
+
+	push	bx
+	mov	ax,3501h	; get #DB vector
+	assume	es:nothing
+	int	21h
+	mov	cx,cs
+	mov	ax,es
+	cmp	ax,cx		; is our handler already installed?
+	mov	cx,bx
+	pop	bx
+	je	@@retpoint
+	mov	[old_dbvec_off],cx
+	mov	[old_dbvec_seg],es
+
+	push	ds
+	push	dx
+	mov	ax,cs
+	mov	ds,ax
+	mov	dx,offset tpls_dbhandler
+	mov	ax,2501h
+	int	21h
+	pop	dx
+	pop	ds
+
+@@retpoint:
+	ret
+openredir_9x	endp
+
+; Return currently-running EXE in ES:DI
+get_cur_exe	proc near	uses ax bx cx
+	mov	ah,62h	; GET CURRENT PSP ADDRESS
+	int	21h
+
+	mov	es,bx
+	mov	es,es:[2Ch]	; get env segment
+
+	xor	ax,ax
+	mov	di,ax
+	cld
+
+@@:
+	mov	cx,ax
+	not	cx	; CX = -1
+	repnz	scasb
+	scasb	; second zero indicating end of environment
+	jnz	@B
+
+	; Skip over number of auxiliary strings - we only care about the first!
+	lea	di,[di+2]
+	ret
+get_cur_exe	endp
+
+tpls_dbhandler	proc
+	assume	ds:nothing,es:nothing
+
+	push	bp
+	mov	bp,sp
+	push	eax
+
+	mov	eax,[bp+2]	; CS:IP
+	cmp	eax,[dpmi_entry]
+	je	@F
+
+	pop	eax
+	pop	bp
+	iret	; Don't pass through to debugger (?)
+
+@@:
+	btr	word ptr[bp+6],8; reset trap flag
+	push	ds
+	push	dx
+	lds	dx,[old_dbvec]
+	mov	ax,2501h	; restore #DB vector
+	int	21h
+
+	mov	ax,cs
+	mov	ds,ax
+	mov	dx,offset intercept
+	mov	ah,9	; write to stdout
+	int	21h
+
+	pop	dx
+	pop	ds
+	pop	eax
+	pop	bp
+	add	sp,4	; skip CS:IP
+	popf
+
+	; Allow any attached debugger to trap DPMI entry
+	push	cs
+	push	offset @F
+	pushf
+	push	[dpmi_entry]
+	jmp	old_dbvec
+	;; Enter Protected Mode ourselves!
+	;call	[dpmi_entry]
+@@:
+	jc	@F
+
+	push	bp
+	mov	bp,sp
+	pushf
+	push	es
+	pushad
+
+	mov	ax,0Ah	; create alias descriptor
+	mov	bx,cs
+	int	31h
+	mov	es,ax
+	assume	es:stub
+	; preset the selector in the payload to avoid duplication
+	call	get_stubsel_ptr
+	mov	es:[di],ax
+
+	xor	ax,ax	; alloc selectors
+	mov	cx,1	; just the one
+	int	31h
+	xchg	ax,[bp+4]; replace segment in return addx
+	movzx	edx,ax
+
+	; copy the properties of this code segment to the one we're making
+	mov	edi,offset descbuf
+	mov	ax,0Bh	; get descriptor
+	mov	bx,cs
+	int	31h
+	mov	ax,0Ch	; set descriptor
+	mov	bx,[bp+4]
+	int	31h
+
+	shl	edx,4
+	mov	ecx,edx
+	shr	ecx,10h
+	mov	ax,7	; set base address
+	int	31h
+
+	mov	ax,204h	; get interrupt vector
+	mov	bl,31h
+	int	31h
+	mov	[old_int31_off],edx
+	mov	[old_int31_seg],cx
+
+	mov	ax,205h	; set interrupt vector
+	mov	bl,31h
+	mov	cx,cs
+	mov	edx,offset tpls_int31
+	int	31h
+
+	popad
+	pop	es
+	assume	es:nothing
+	popf
+	pop	bp
+@@:
+	retf
+tpls_dbhandler	endp
+
+; Returns in DI an offset that can be used to access "payload:stub_selector"
+; from a selector pointing at "stub"
+get_stubsel_ptr	proc near
+	mov	di,payload
+	sub	di,stub
+	shl	di,4
+	add	edi,offset stub_selector
+	ret
+get_stubsel_ptr	endp
+
+tpls_int31	proc
+	assume	ds:nothing,es:nothing
+
+	cmp	ax,300h	; simulate Real Mode interrupt
+	jne	@@go_old
+	cmp	bl,2Fh
+	jne	@@go_old
+	cmp	byte ptr es:[edi+1].rmcall._eax,15h	; MSCDEX call?
+	jne	@@go_old
+
+	push	ds
+	push	edi
+	call	get_stubsel_ptr
+	mov	ds,cs:[di]
+	assume	ds:stub
+	pop	edi
+
+	bt	ds:[statusword],3	; payload active?
+	jnc	@F
+
+	btr	ds:[statusword],4	; need to run the callback?
+	jnc	@@done
+
+	pushad
+	pushfd
+	; the payload sets the code segment for this when it activates
+	call	callback_pm
+	assume	ds:payload
+	popad
+	jmp	@@done
+
+@@:
+	assume	ds:stub
+	push	ax
+	push	bx
+	push	cx
+
+	; To avoid duplicating program logic, just pass this through to Real Mode
+	mov	ax,302h	; call Real Mode procedure w/IRET frame
+	xor	bx,bx
+	xor	cx,cx
+	mov	es:[edi].rmcall._ip,offset tpls_int2f
+	mov	es:[edi].rmcall._cs,stub
+	pushfd
+	call	old_int31
+
+	pop	cx
+	pop	bx
+	pop	ax
+
+@@done:
+	pop	ds
+	assume	ds:nothing
+
+@@go_old:
+	jmp	old_int31
+tpls_int31	endp
+extra9x	ends
+
+stub	group	stubdos,extra9x
+
 ; Initialization code, not resident
 init	segment use16
 	assume	ds:nothing,es:nothing
@@ -2447,6 +2776,27 @@ entry:
 	jmp	@@exitwitherr
 
 @@:
+	mov	ax,1600h; Windows enhanced-mode inst check
+	int	2Fh
+	cmp	al,4
+	jne	@F
+
+	bts	[statusword],6
+	btr	[statusword],0	; don't do EMS if under Win9x
+	mov	dx,offset win9xfound
+	mov	ah,9	; write to stdout
+	int	21h
+
+	push	es
+	pusha
+	mov	ax,1687h; DPMI inst check
+	int	2Fh
+	mov	[dpmi_entry_off],di
+	mov	[dpmi_entry_seg],es
+	popa
+	pop	es
+
+@@:
 	; Check MSCDEX is installed, and save drive letter range
 	mov	ax,1500h
 	xor	bx,bx
@@ -2465,6 +2815,12 @@ entry:
 
 	mov	bx,bp	; get PSP
 	mov	bp,cs	; current code segment == end of payload
+	bt	fs:[statusword],6
+	jc	@F
+
+	; No need for 9x support code
+	mov	bp,extra9x	; end of payload
+@@:
 	sub	bp,bx	; total resident paragraphs
 
 	bt	fs:[statusword],0
@@ -2583,6 +2939,7 @@ emsallocerr	db "/E specified but unable to allocate EMS page, aborting...",0Dh,0
 emsmaperr	db "/E specified but unable to map EMS page, aborting...",0Dh,0Ah,"$"
 freeenv_err	db "Couldn't free environment segment, aborting...",0Dh,0Ah,"$"
 nomscdex	db "No MSCDEX detected, aborting...",0Dh,0Ah,"$"
+win9xfound	db "Windows 9x detected, this is gonna be fun!",0Dh,0Ah,"$"
 savingvecs	db "Saving interrupt vectors...",0Dh,0Ah,"$"
 writingvecs	db "Installing new interrupt vectors...",0Dh,0Ah,"$"
 goingresident	db "Going resident. You can play Rayman now!",0Dh,0Ah,"$"

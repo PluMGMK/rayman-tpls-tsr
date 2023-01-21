@@ -711,6 +711,9 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[pPerdu],(1ADEEh-81508h)		; @ 0x1ADEE
 	mov	gs:[pPlayTrack],(283D8h-81508h)		; @ 0x283D8
 
+	; This version has DRM that involves checking files on the CD
+	bts	cs:[statusword],2
+
 @@payload_fixedup:
 	; Next we need to open up Rayman's config file and get the driver ID
 	mov	ax,3D00h	; OPEN read-only

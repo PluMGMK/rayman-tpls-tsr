@@ -43,10 +43,10 @@ However, it also means that unlike the other implementations, a custom CD image 
 
 ## Compilation
 
-`TPLSTSR4` (unlike the previous version) is a plain old `MZ` executable, so you can assemble it with MASM, JWASM, UASM, etc.
+`TPLSTSR4` (unlike the previous version) is a plain old `MZ` executable. However, because of the peculiar way I've used groups in the code, a lot of assemblers seem to miscalculate certain offsets. [JWasm](https://github.com/Baron-von-Riedesel/JWasm) v2.14 or greater will assemble the TSR correctly, and it can run on Windows, DOS or Linux.
 
 ```
-uasm -mz TPLSTSR4.ASM
+jwasm -mz TPLSTSR4.ASM
 ```
 
 It will warn about no stack being defined, but it should still produce a working `TPLSTSR4.EXE` in DOS `MZ` format.

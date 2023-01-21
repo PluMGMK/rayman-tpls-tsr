@@ -110,6 +110,20 @@ _SOS_DRV_DRIVERHEADER struc
 	wExtenderType   dd ?
 _SOS_DRV_DRIVERHEADER ends
 
+debug_bell	macro
+	mov	ah,2	; write character
+	mov	dl,7	; bell
+	int	21h
+endm
+
+debug_bell_saveregs macro
+	push	ax
+	push	dx
+	debug_bell
+	pop	dx
+	pop	ax
+endm
+
 ; Real/VM86-Mode code, resident in Conventional Memory
 stubdos	segment use16
 sos_devid	dd 999		; default (invalid) value used by Rayman
@@ -413,6 +427,10 @@ do_int2f	proc near
 	ret
 
 @@:
+	clc	; since, for AX=1510h, "Windows95 sets CF if CX isn't a
+		; CD-ROM drive but leaves CF unchanged if the drive is
+		; in fact a CD-ROM" (I can confirm this is also true for 98,
+		; so it is probably also true for Me.)
 	int	2Fh
 	ret
 do_int2f	endp
@@ -913,8 +931,7 @@ chk_suitablecd	proc near	uses ds ax cx es bx dx
 	mov	es:[bx.IOCTLRW.wCount],size AudioDiscInfo
 	mov	[bp.AudioDiscInfo.function],0Ah	; audio disc info
 
-	pushf
-	call	old_int2f
+	call	do_int2f
 	jc	@@cleanupstack
 
 	bt	es:[bx.IOCTLRW.wStatus],0Fh	; error?
@@ -939,9 +956,11 @@ chk_suitablecd	proc near	uses ds ax cx es bx dx
 	clc
 
 @@cleanupstack:
+	setc	al	; remember carry flag!
 	add	sp,((size AudioDiscInfo) + 1) AND (NOT 1)
 	pop	bp
 	add	sp,((size IOCTLRW) + 1) AND (NOT 1)
+	rcr	al,1	; restore carry
 	ret
 
 @@toomanydatatracks:
@@ -1174,6 +1193,9 @@ tpls_int2f	proc
 
 	btr	cs:[statusword],4	; need to run the callback?
 	jnc	@@passthrough
+	bt	cs:[statusword],6	; on Win9x, this code should be unreachable
+	jc	@@passthrough		; but test for it just in case...
+	
 	; the payload sets this when it activates
 	jmp	cs:callback2payload
 	; and the callback itself will send us to old_int2f when it's done
@@ -1251,7 +1273,6 @@ payload	segment use32
 	test	al,al	; init function?
 	jnz	@@passthrough
 	bts	gs:[statusword],3
-	mov	gs:[payload_cs],cs
 
 	push	eax
 	push	ebx
@@ -1272,7 +1293,11 @@ payload	segment use32
 	pop	ds
 	mov	edx,offset hook_handler
 	int	21h
-	
+
+	; On Win9x, we don't allocate an RM callback, but just let the int 31h handler call the payload directly
+	bt	gs:[statusword],6
+	jc	@F
+
 	mov	ax,303h	; allocate RM callback
 	mov	esi,offset callback_fromstub
 	pop	es	; get saved DS from stack
@@ -1281,7 +1306,13 @@ payload	segment use32
 	mov	gs:[callback_off],dx
 	mov	gs:[callback_seg],cx
 
-	push	es	; restore DS to what it was
+	push	es	; restore DS on stack to what it was
+	jmp	@@callback_done
+
+@@:
+	mov	gs:[payload_cs],cs
+
+@@callback_done:
 	pop	ds
 	pop	es
 
@@ -1878,6 +1909,7 @@ mydatasel	dw ?
 NUM_HOOKS	equ 50	; more than we'll ever need, hopefully!
 hook_addxs	dd NUM_HOOKS dup (0)
 hook_origcode	dw NUM_HOOKS dup (0F5CDh)
+cur_trig_hook	dw -1
 
 ; Pointers to code in Rayman
 psosDRVInit_ret	dd 0
@@ -1951,27 +1983,12 @@ callback_fromstub proc
 	; Reactivate all hookpoints.
 	; NB: Because this happens here, we need to make sure int 2Fh
 	; never gets called from within the hookpoint handler!
-	push	es
-	push	edi
 	mov	ds,cs:[mydatasel]
 	assume	ds:payload
 
-	mov	edi,(offset hook_origcode)-4
-	mov	ecx,NUM_HOOKS
-	std
-	xor	eax,eax
-@@hook_reac_loop:
-	scasd				; check if there is a hookpoint with this idx
-	loope	@@hook_reac_loop	; this decrements ECX!
-	je	@@hook_reac_done	; if ECX and [ES:EDI] are both zero, we're finished
-	call	hook_activate		; the loope instruction has made this the right idx for here...
-	inc	ecx			; cancel the effect of the loope instruction before next iteration
-	loop	@@hook_reac_loop
-@@hook_reac_done:
-	cld
-
-	pop	edi
-	pop	es
+	movzx	ecx,[cur_trig_hook]
+	call	hook_activate
+	mov	[cur_trig_hook],-1
 
 	call	get_stub_seg
 	assume	gs:stub
@@ -2178,6 +2195,15 @@ hook_handler	proc
 	mov	eax,[ebp]		; the return addx
 	call	hook_find
 	call	hook_deactivate
+
+	; update the currently-triggered hook
+	xchg	cx,[cur_trig_hook]
+	cmp	cx,-1
+	je	@F
+	; if there's another pending, reactivate it
+	; by using the macro "debug_bell_saveregs", I have found this happens quite often!
+	call	hook_activate
+@@:
 
 	; we'll want the hookpoint reactivated on the next MSCDEX call
 	push	gs
@@ -2677,7 +2703,21 @@ tpls_int31	proc
 tpls_int31	endp
 extra9x	ends
 
-stub	group	stubdos,extra9x
+; Code in this segment briefly hooks into the int 2Fh chain, to check if we can intercept MSCDEX calls from Real Mode
+dummy_hook	segment use16
+dummy_hook_off:
+	assume	ds:nothing,es:nothing,fs:nothing,gs:nothing
+	cmp	ax,1500h
+	jne	@F
+
+	; If we were able to intercept int 2Fh, AX=1500h, then there's no need for the extra Win9x support code
+	btr	cs:[statusword],6
+
+@@:
+	jmp	cs:old_int2f
+dummy_hook	ends
+
+stub	group	stubdos,extra9x,dummy_hook
 
 ; Initialization code, not resident
 init	segment use16
@@ -2776,36 +2816,62 @@ entry:
 	jmp	@@exitwitherr
 
 @@:
-	mov	ax,1600h; Windows enhanced-mode inst check
-	int	2Fh
-	cmp	al,4
-	jne	@F
+	mov	ax,352Fh; get int 2Fh vector
+	int	21h
+	mov	fs:[old_int2f_off],bx
+	mov	fs:[old_int2f_seg],es
 
+	; while checking if MSCDEX is installed, also check (in principle) if we can hook it
+	push	fs
+	pop	ds
+	assume	ds:stub
+	mov	ax,252Fh; set int 2Fh vector
+	mov	dx,offset dummy_hook_off
+	int	21h
+	; set bit 6 here - if the OS doesn't intercept the call, dummy_hook will clear it
 	bts	[statusword],6
+
+	; Check MSCDEX is installed, and save drive letter range
+	mov	ax,1500h
+	xor	bx,bx
+	int	2Fh
+
+	mov	ax,252Fh; set int 2Fh vector
+	lds	dx,fs:[old_int2f]
+	assume	ds:nothing
+	int	21h
+
+	push	cs
+	pop	ds
+	assume	ds:init
+
+	test	bx,bx
+	jnz	@F
+	mov	dx,offset nomscdex
+	jmp	@@exitwitherr
+
+@@:
+	;mov	ax,1600h; Windows enhanced-mode inst check
+	;int	2Fh
+	;cmp	al,4
+	;jne	@F
+
+	bt	[statusword],6
+	jnc	@F
+
 	btr	[statusword],0	; don't do EMS if under Win9x
 	mov	dx,offset win9xfound
 	mov	ah,9	; write to stdout
 	int	21h
 
-	push	es
-	pusha
+	push	bx
+	push	cx
 	mov	ax,1687h; DPMI inst check
 	int	2Fh
 	mov	[dpmi_entry_off],di
 	mov	[dpmi_entry_seg],es
-	popa
-	pop	es
-
-@@:
-	; Check MSCDEX is installed, and save drive letter range
-	mov	ax,1500h
-	xor	bx,bx
-	int	2Fh
-	test	bx,bx
-	jnz	@F
-
-	mov	dx,offset nomscdex
-	jmp	@@exitwitherr
+	pop	cx
+	pop	bx
 
 @@:
 	add	cx,'a'	; convert to drive letter
@@ -2813,8 +2879,8 @@ entry:
 	mov	fs:[first_cddrv],cl
 	mov	fs:[endof_cddrv],bl
 
-	mov	bx,bp	; get PSP
-	mov	bp,cs	; current code segment == end of payload
+	mov	bx,bp		; get PSP
+	mov	bp,dummy_hook	; dummy hook marks end of resident code
 	bt	fs:[statusword],6
 	jc	@F
 
@@ -2885,11 +2951,6 @@ entry:
 	mov	fs:[old_int21_off],bx
 	mov	fs:[old_int21_seg],es
 
-	mov	ax,352Fh; get int 2Fh vector
-	int	21h
-	mov	fs:[old_int2f_off],bx
-	mov	fs:[old_int2f_seg],es
-
 	mov	dx,offset writingvecs
 	mov	ah,9	; write to stdout
 	int	21h
@@ -2925,7 +2986,7 @@ entry:
 	int	21h
 	mov	ax,4CFFh; EXIT with status FFh
 	int	21h
-	
+
 messages:
 no386		db "Looks like you're trying to run this on an 80(2)86. Aborting...",0Dh,0Ah,"$"
 already		db "TPLS already resident. Aborting. You can just play Rayman.",0Dh,0Ah,"$"
@@ -2939,7 +3000,7 @@ emsallocerr	db "/E specified but unable to allocate EMS page, aborting...",0Dh,0
 emsmaperr	db "/E specified but unable to map EMS page, aborting...",0Dh,0Ah,"$"
 freeenv_err	db "Couldn't free environment segment, aborting...",0Dh,0Ah,"$"
 nomscdex	db "No MSCDEX detected, aborting...",0Dh,0Ah,"$"
-win9xfound	db "Windows 9x detected, this is gonna be fun!",0Dh,0Ah,"$"
+win9xfound	db "Protected-Mode OS intercepts MSCDEX calls, this is gonna be fun!",0Dh,0Ah,"$"
 savingvecs	db "Saving interrupt vectors...",0Dh,0Ah,"$"
 writingvecs	db "Installing new interrupt vectors...",0Dh,0Ah,"$"
 goingresident	db "Going resident. You can play Rayman now!",0Dh,0Ah,"$"

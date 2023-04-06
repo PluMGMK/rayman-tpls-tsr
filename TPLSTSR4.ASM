@@ -84,8 +84,8 @@ PlayReq	ends
 AudioDiscInfo	struc
 	function	db ?
 	first_audtrack	db ?
-	last_audtrack	dd ?
-	addr_leadout	db ?
+	last_audtrack	db ?
+	addr_leadout	dd ?
 AudioDiscInfo	ends
 
 AudioTrackInfo	struc
@@ -139,6 +139,10 @@ menutrack_start	dd 0
 menutrack_len	dd ?
 menutrack_wrong	dd ?
 
+FIRSTINTROTRACK	equ 52		; first intro track on TPLS CD
+NUMINTROTRACKS	equ 5		; English, French, German, Japanese, Chinese
+FIRSTOUTROTRACK	equ FIRSTINTROTRACK + NUMINTROTRACKS
+
 old_int21	label dword
 old_int21_off	dw ?
 old_int21_seg	dw ?
@@ -167,6 +171,8 @@ hmidrv_buffer	db BUFSIZE dup (?)
 ; Bit 4 = Hookpoints dirty
 ; Bit 5 = EMS state saved
 ; Bit 6 = Running on Win9x
+; Bit 7 = Spoof Copyright / Abstract / Bibliographic Filenames
+; Bit 8 = Next Audio Disc Info Request should return spoofed data
 statusword	dw 0
 
 emshdl		dw 0
@@ -209,11 +215,21 @@ payload_fail	db 33o,"[35m","Payload injection failed - could not read valid driv
 
 ; Rayman version strings
 ray121us	db "RAYMAN (US) v1.21"
-ray112us	db "RAYMAN (US) v1.12"
+ray121fr	db "RAYMAN (FR) v1.21"
+ray121ch	db "RAYMAN (CH) v1.21"
+ray120jp	db "RAYMAN (JP) v1.20"
+ray120uk	db "RAYMAN (UK) v1.20"
 ray120de	db "RAYMAN (GERMAN) v1.20"
-ray112eu	db "RAYMAN (EU) v1.12"
 ray120itspdu	db "RAYMAN (IT-SP-DU) v1.20"
+ray112us	db "RAYMAN (US) v1.12"
+ray112eu	db "RAYMAN (EU) v1.12"
+ray110eu	db "RAYMAN (EU) v1.10"
+ray100		db "RAYMAN v1.00"
 
+unprotected	db "(C) 1994-1995 UBI STUDIOS (UNPROTECTED), FRANCE"
+
+; This is the audio disc info that Rayman v1.00 and v1.10 expect to get!
+spoof_info	AudioDiscInfo<0Ah,1,25,?>
 
 ; Check if we've been called from Rayman's initialization screen
 ; CF set if yes, clear if no
@@ -246,13 +262,23 @@ chk_is_rayman	proc near	uses ds si es di
 chk_is_rayman	endp
 
 ; Check if what's written at the top of the screen matches CX chars @ ES:DI
+; If CX is negative, we check backwards from the right instead
 ; CF set if yes, clear if no
 chk_entete	proc near	uses ax cx ds si es di
 	mov	si,0B800h	; Video BIOS text buffer
 	mov	ds,si
-	xor	si,si
 
+	test	cx,cx
+	js	@@rtl
+
+	xor	si,si
 	cld
+	jmp	@F
+@@rtl:
+	mov	si,0A0h-2	; Screen is 0x50 chars wide = 0xA0 bytes
+	std
+	neg	cx
+
 @@:
 	lodsw
 	scasb
@@ -485,10 +511,30 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	call	chk_entete
 	jc	@@setup_ptrs_v121us
 
+	mov	di,offset ray121fr
+	mov	cx,sizeof ray121fr
+	call	chk_entete
+	jc	@@setup_ptrs_v121fr
+
+	mov	di,offset ray121ch
+	mov	cx,sizeof ray121ch
+	call	chk_entete
+	jc	@@setup_ptrs_v121ch
+
 	mov	di,offset ray112us
 	mov	cx,sizeof ray112us
 	call	chk_entete
 	jc	@@setup_ptrs_v112us
+
+	mov	di,offset ray120jp
+	mov	cx,sizeof ray120jp
+	call	chk_entete
+	jc	@@setup_ptrs_v120jp
+
+	mov	di,offset ray120uk
+	mov	cx,sizeof ray120uk
+	call	chk_entete
+	jc	@@setup_ptrs_v120uk
 
 	mov	di,offset ray120de
 	mov	cx,sizeof ray120de
@@ -499,6 +545,16 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	cx,sizeof ray112eu
 	call	chk_entete
 	jc	@@setup_ptrs_v112eu
+
+	mov	di,offset ray110eu
+	mov	cx,sizeof ray110eu
+	call	chk_entete
+	jc	@@setup_ptrs_v110eu
+
+	mov	di,offset ray100
+	mov	cx,sizeof ray100
+	call	chk_entete
+	jc	@@setup_ptrs_v100
 
 	mov	di,offset ray120itspdu
 	mov	cx,sizeof ray120itspdu
@@ -522,12 +578,12 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[ptrack_table],(4F3Bh-6664h)		; @ 0x4F3B in the data section
 	mov	gs:[ptimeCd],(4FBCh-6664h)		; @ 0x4FBC in the data section
 	mov	gs:[pcdTime],(3D85Ch-6664h)		; @ 0x3D85C in the data section
-	mov	gs:[prbook_table],(4E8C7h-6664h)	; @ 0x4E8C7 in the data section
+	; mov	gs:[prbook_table],(4E8C7h-6664h)	; @ 0x4E8C7 in the data section
 	mov	gs:[prbook_lentable],(4EA5Bh-6664h)	; @ 0x4EA5B in the data section
-	mov	gs:[prbook_tablefl],(4EEFEh-6664h)	; @ 0x4EEFE in the data section
-	mov	gs:[plowest_atrack],(4E8C1h-6664h)	; @ 0x4E8C1 in the data section
-	mov	gs:[phighest_atrack],(4E8C1h-6664h)	; @ 0x4E8C2 in the data section
-	mov	gs:[pcd_driveletter],(3FA27h-6664h)	; @ 0x3FA27 in the data section
+	; mov	gs:[prbook_tablefl],(4EEFEh-6664h)	; @ 0x4EEFE in the data section
+	; mov	gs:[plowest_atrack],(4E8C1h-6664h)	; @ 0x4E8C1 in the data section
+	; mov	gs:[phighest_atrack],(4E8C2h-6664h)	; @ 0x4E8C2 in the data section
+	; mov	gs:[pcd_driveletter],(3FA27h-6664h)	; @ 0x3FA27 in the data section
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x73D6D in this version
@@ -550,46 +606,86 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 
 	jmp	@@payload_fixedup
 
-@@setup_ptrs_v112us:
-	; TODO: These pointers are correct for the "UNPROTECTED" version I have.
-	; Is there a "PROTECTED" version that might have different pointers?
-
+@@setup_ptrs_v121fr:
 	; Addresses relative to sSOSDIGIInitDriver in Rayman's data section
-	; It's at 0x137634 in this version
-	mov	gs:[pnum_world],(170520h-137634h)	; @ 0x170520
-	mov	gs:[pnum_level],(17050Eh-137634h)	; @ 0x17050E
-	mov	gs:[ptrack_table],(135EF3h-137634h)	; @ 0x135EF3
-	mov	gs:[ptimeCd],(135F74h-137634h)		; @ 0x135F74
-	mov	gs:[pcdTime],(16E4F4h-137634h)		; @ 0x16E4F4
-	mov	gs:[prbook_table],(17F667h-137634h)	; @ 0x17F667
-	mov	gs:[prbook_lentable],(17F7FBh-137634h)	; @ 0x17F7FB
-	mov	gs:[prbook_tablefl],(17FB9Bh-137634h)	; @ 0x17FB9B
-	mov	gs:[plowest_atrack],(17F661h-137634h)	; @ 0x17F661
-	mov	gs:[phighest_atrack],(17F662h-137634h)	; @ 0x17F662
-	mov	gs:[pcd_driveletter],(1706BBh-137634h)	; @ 0x1706BB
-	mov	gs:[plang],(1706C8h-137634h)		; @ 0x1706C8
+	; It's at 0x137664 in this version
+	mov	gs:[pnum_world],(17088Ch-137664h)	; @ 0x17088C
+	mov	gs:[pnum_level],(17087Ch-137664h)	; @ 0x17087C
+	mov	gs:[ptrack_table],(135F3Bh-137664h)	; @ 0x135F3B
+	mov	gs:[ptimeCd],(135FBCh-137664h)		; @ 0x135FBC
+	mov	gs:[pcdTime],(16E85Ch-137664h)		; @ 0x16E85C
+	; mov	gs:[prbook_table],(17F8C7h-137664h)	; @ 0x17F8C7
+	mov	gs:[prbook_lentable],(17FA5Bh-137664h)	; @ 0x17FA5B
+	; mov	gs:[prbook_tablefl],(17FEFEh-137664h)	; @ 0x18011E
+	; mov	gs:[plowest_atrack],(17F8C1h-137664h)	; @ 0x17F8C1
+	; mov	gs:[phighest_atrack],(17F8C2h-137664h)	; @ 0x17F8C2
+	; mov	gs:[pcd_driveletter],(170A27h-137664h)	; @ 0x170A27
+	mov	gs:[plang],(170A35h-137664h)		; @ 0x170A35
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
-	; It's at 0x81216 in this version
-	mov	gs:[pCreditsTrackNo],(1AC78h-81216h)	; @ 0x1AC78
-	mov	gs:[pLogoTrackNo],(1ACA0h-81216h)	; @ 0x1ACA0
-	mov	gs:[pMenuTrackNo],(1AD20h-81216h)	; @ 0x1AD20
-	mov	gs:[pGOverTrackNo],(1AD48h-81216h)	; @ 0x1AD48
-	mov	gs:[pIntroTrackNo],(163E8h-81216h)	; @ 0x163E8
-	mov	gs:[pOuttroTrackNo],(333E6h-81216h)	; @ 0x333E6
-	mov	gs:[pDoGrowingPlat],(786E0h-81216h)	; @ 0x786E0
-	mov	gs:[pMoskitoLock],(51715h-81216h)	; @ 0x51715
-	mov	gs:[pMoskitoFast],(58874h-81216h)	; @ 0x58874
-	mov	gs:[pMoskitoSlow],(5889Dh-81216h)	; @ 0x5889D
-	mov	gs:[pLevelStart1],(14FE0h-81216h)	; @ 0x14FE0
-	mov	gs:[pLevelStart2],(156DAh-81216h)	; @ 0x156DA
-	mov	gs:[pLevelEnd1],(1557Bh-81216h)		; @ 0x1557B
-	mov	gs:[pLevelEnd2],(15B7Eh-81216h)		; @ 0x15B7E
-	mov	gs:[pExitSign1],(5FD2Fh-81216h)		; @ 0x5FD2F
-	mov	gs:[pExitSign2],(5FE8Ch-81216h)		; @ 0x5FE8C
-	mov	gs:[pPerdu],(1ACBEh-81216h)		; @ 0x1ACBE
-	mov	gs:[pPlayTrack],(282C4h-81216h)		; @ 0x282C4
+	; It's at 0x81D8D in this version
+	mov	gs:[pCreditsTrackNo],(1AF48h-81D8Dh)	; @ 0x1AF48
+	mov	gs:[pLogoTrackNo],(1AF70h-81D8Dh)	; @ 0x1AF70
+	mov	gs:[pMenuTrackNo],(1AFF0h-81D8Dh)	; @ 0x1AFF0
+	mov	gs:[pGOverTrackNo],(1B018h-81D8Dh)	; @ 0x1B018
+	mov	gs:[pPlayIntro],(16594h-81D8Dh)		; @ 0x16594
+	mov	gs:[pPlayOuttro],(338B5h-81D8Dh)	; @ 0x33805
+	mov	gs:[pDoGrowingPlat],(791C0h-81D8Dh)	; @ 0x791C0
+	mov	gs:[pMoskitoLock],(51D55h-81D8Dh)	; @ 0x51D55
+	mov	gs:[pMoskitoFast],(58EB4h-81D8Dh)	; @ 0x58EB4
+	mov	gs:[pMoskitoSlow],(58EDDh-81D8Dh)	; @ 0x58EDD
+	mov	gs:[pLevelStart1],(150F0h-81D8Dh)	; @ 0x150F0
+	mov	gs:[pLevelStart2],(157F6h-81D8Dh)	; @ 0x157F6
+	mov	gs:[pLevelEnd1],(15697h-81D8Dh)		; @ 0x15697
+	mov	gs:[pLevelEnd2],(15CA6h-81D8Dh)		; @ 0x15CA6
+	mov	gs:[pExitSign1],(6036Fh-81D8Dh)		; @ 0x6036F
+	mov	gs:[pExitSign2],(604CCh-81D8Dh)		; @ 0x604CC
+	mov	gs:[pPerdu],(1AF8Eh-81D8Dh)		; @ 0x1AF8E
+	mov	gs:[pPlayTrack],(28710h-81D8Dh)		; @ 0x28710
 
+	; This version has DRM that involves checking files on the CD
+	bts	cs:[statusword],2
+	jmp	@@payload_fixedup
+
+@@setup_ptrs_v121ch:
+	; Addresses relative to sSOSDIGIInitDriver in Rayman's data section
+	; It's at 0x137694 in this version
+	mov	gs:[pnum_world],(170AA4h-137694h)	; @ 0x170AA4
+	mov	gs:[pnum_level],(170A94h-137694h)	; @ 0x170A94
+	mov	gs:[ptrack_table],(135F3Bh-137694h)	; @ 0x135F3B
+	mov	gs:[ptimeCd],(135FBCh-137694h)		; @ 0x135FBC
+	mov	gs:[pcdTime],(16EA74h-137694h)		; @ 0x16EA74
+	; mov	gs:[prbook_table],(17FAE7h-137694h)	; @ 0x17FAE7
+	mov	gs:[prbook_lentable],(17FC7Bh-137694h)	; @ 0x17FC7B
+	; mov	gs:[prbook_tablefl],(18011Eh-137694h)	; @ 0x18011E
+	; mov	gs:[plowest_atrack],(17FAE1h-137694h)	; @ 0x17FAE1
+	; mov	gs:[phighest_atrack],(17FAE2h-137694h)	; @ 0x17FAE2
+	; mov	gs:[pcd_driveletter],(170C3Fh-137694h)	; @ 0x170C3F
+	mov	gs:[plang],(170C4Eh-137694h)		; @ 0x170C4E
+
+	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
+	; It's at 0x8169D in this version
+	mov	gs:[pCreditsTrackNo],(1AF48h-8169Dh)	; @ 0x1AF48
+	mov	gs:[pLogoTrackNo],(1AF70h-8169Dh)	; @ 0x1AF70
+	mov	gs:[pMenuTrackNo],(1AFF0h-8169Dh)	; @ 0x1AFF0
+	mov	gs:[pGOverTrackNo],(1B018h-8169Dh)	; @ 0x1B018
+	mov	gs:[pPlayIntro],(16594h-8169Dh)		; @ 0x16594
+	mov	gs:[pPlayOuttro],(336BDh-8169Dh)	; @ 0x336BD
+	mov	gs:[pDoGrowingPlat],(78AD0h-8169Dh)	; @ 0x78AD0
+	mov	gs:[pMoskitoLock],(51D45h-8169Dh)	; @ 0x51D45
+	mov	gs:[pMoskitoFast],(58EA4h-8169Dh)	; @ 0x58EA4
+	mov	gs:[pMoskitoSlow],(58ECDh-8169Dh)	; @ 0x58ECD
+	mov	gs:[pLevelStart1],(150F0h-8169Dh)	; @ 0x150F0
+	mov	gs:[pLevelStart2],(157F6h-8169Dh)	; @ 0x157F6
+	mov	gs:[pLevelEnd1],(15697h-8169Dh)		; @ 0x15697
+	mov	gs:[pLevelEnd2],(15CA6h-8169Dh)		; @ 0x15CA6
+	mov	gs:[pExitSign1],(6035Fh-8169Dh)		; @ 0x6035F
+	mov	gs:[pExitSign2],(604BCh-8169Dh)		; @ 0x604BC
+	mov	gs:[pPerdu],(1AF8Eh-8169Dh)		; @ 0x1AF8E
+	mov	gs:[pPlayTrack],(28710h-8169Dh)		; @ 0x28710
+
+	; This version has DRM that involves checking files on the CD
+	bts	cs:[statusword],2
 	jmp	@@payload_fixedup
 
 @@setup_ptrs_v120itspdu:
@@ -600,12 +696,12 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[ptrack_table],(135F0Bh-137634h)	; @ 0x135F0B
 	mov	gs:[ptimeCd],(135F8Ch-137634h)		; @ 0x135F8C
 	mov	gs:[pcdTime],(16E8ECh-137634h)		; @ 0x16E8EC
-	mov	gs:[prbook_table],(17F957h-137634h)	; @ 0x17F957
+	; mov	gs:[prbook_table],(17F957h-137634h)	; @ 0x17F957
 	mov	gs:[prbook_lentable],(17FAEBh-137634h)	; @ 0x17FAEB
-	mov	gs:[prbook_tablefl],(17FF8Eh-137634h)	; @ 0x17FF8E
-	mov	gs:[plowest_atrack],(17F951h-137634h)	; @ 0x17F951
-	mov	gs:[phighest_atrack],(17F952h-137634h)	; @ 0x17F952
-	mov	gs:[pcd_driveletter],(170AB7h-137634h)	; @ 0x170AB7
+	; mov	gs:[prbook_tablefl],(17FF8Eh-137634h)	; @ 0x17FF8E
+	; mov	gs:[plowest_atrack],(17F951h-137634h)	; @ 0x17F951
+	; mov	gs:[phighest_atrack],(17F952h-137634h)	; @ 0x17F952
+	; mov	gs:[pcd_driveletter],(170AB7h-137634h)	; @ 0x170AB7
 	mov	gs:[plang],(170AC5h-137634h)		; @ 0x170AC5
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
@@ -633,6 +729,92 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	bts	cs:[statusword],2
 	jmp	@@payload_fixedup
 
+@@setup_ptrs_v120jp:
+	; Addresses relative to sSOSDIGIInitDriver in Rayman's data section
+	; It's at 0x137634 in this version
+	mov	gs:[pnum_world],(17091Ch-137634h)	; @ 0x17091C
+	mov	gs:[pnum_level],(17090Ch-137634h)	; @ 0x17090C
+	mov	gs:[ptrack_table],(135EFFh-137634h)	; @ 0x135EFF
+	mov	gs:[ptimeCd],(135F80h-137634h)		; @ 0x135F80
+	mov	gs:[pcdTime],(16E8ECh-137634h)		; @ 0x16E8EC
+	; mov	gs:[prbook_table],(17F957h-137634h)	; @ 0x17F957
+	mov	gs:[prbook_lentable],(17FAEBh-137634h)	; @ 0x17FAEB
+	; mov	gs:[prbook_tablefl],(17FF8Eh-137634h)	; @ 0x17FF8E
+	; mov	gs:[plowest_atrack],(17F951h-137634h)	; @ 0x17F951
+	; mov	gs:[phighest_atrack],(17F952h-137634h)	; @ 0x17F952
+	; mov	gs:[pcd_driveletter],(170AB7h-137634h)	; @ 0x170AB7
+	mov	gs:[plang],(170AC5h-137634h)		; @ 0x170AC5
+
+	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
+	; It's at 0x81EB9 in this version
+	mov	gs:[pCreditsTrackNo],(1AEC8h-81EB9h)	; @ 0x1AEC8
+	mov	gs:[pLogoTrackNo],(1AEF0h-81EB9h)	; @ 0x1AEF0
+	mov	gs:[pMenuTrackNo],(1AF70h-81EB9h)	; @ 0x1AF70
+	mov	gs:[pGOverTrackNo],(1AF98h-81EB9h)	; @ 0x1AF98
+	mov	gs:[pPlayIntro],(16511h-81EB9h)		; @ 0x16511
+	mov	gs:[pPlayOuttro],(33B3Dh-81EB9h)	; @ 0x33B3D
+	mov	gs:[pDoGrowingPlat],(792B0h-81EB9h)	; @ 0x792B0
+	mov	gs:[pMoskitoLock],(52225h-81EB9h)	; @ 0x52225
+	mov	gs:[pMoskitoFast],(59384h-81EB9h)	; @ 0x59384
+	mov	gs:[pMoskitoSlow],(593ADh-81EB9h)	; @ 0x593AD
+	mov	gs:[pLevelStart1],(14FD0h-81EB9h)	; @ 0x14FD0
+	mov	gs:[pLevelStart2],(156E6h-81EB9h)	; @ 0x156E6
+	mov	gs:[pLevelEnd1],(15587h-81EB9h)		; @ 0x15587
+	mov	gs:[pLevelEnd2],(15B96h-81EB9h)		; @ 0x15B96
+	mov	gs:[pExitSign1],(6083Fh-81EB9h)		; @ 0x6083F
+	mov	gs:[pExitSign2],(6099Ch-81EB9h)		; @ 0x6099C
+	mov	gs:[pPerdu],(1AF0Eh-81EB9h)		; @ 0x1AF0E
+	mov	gs:[pPlayTrack],(28650h-81EB9h)		; @ 0x28650
+
+	; This version has DRM that involves checking files on the CD
+	bts	cs:[statusword],2
+	jmp	@@payload_fixedup
+
+@@setup_ptrs_v120uk:
+	; Addresses relative to sSOSDIGIInitDriver in Rayman's data section
+	; It's at 0x137634 in this version
+	mov	gs:[pnum_world],(17091Ch-137634h)	; @ 0x17091C
+	mov	gs:[pnum_level],(17090Ch-137634h)	; @ 0x17090C
+	mov	gs:[ptrack_table],(135F0Bh-137634h)	; @ 0x135F0B
+	mov	gs:[ptimeCd],(135F8Ch-137634h)		; @ 0x135F8C
+	mov	gs:[pcdTime],(16E8ECh-137634h)		; @ 0x16E8EC
+	; mov	gs:[prbook_table],(17F957h-137634h)	; @ 0x17F957
+	mov	gs:[prbook_lentable],(17FAEBh-137634h)	; @ 0x17FAEB
+	; mov	gs:[prbook_tablefl],(17FF8Eh-137634h)	; @ 0x17FF8E
+	; mov	gs:[plowest_atrack],(17F951h-137634h)	; @ 0x17F951
+	; mov	gs:[phighest_atrack],(17F952h-137634h)	; @ 0x17F952
+	; mov	gs:[pcd_driveletter],(170AB7h-137634h)	; @ 0x170AB7
+	mov	gs:[plang],(170AC5h-137634h)		; @ 0x170AC5
+
+	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
+	; It's at 0x821FF in this version
+	mov	gs:[pCreditsTrackNo],(1AED8h-821FFh)	; @ 0x1AED8
+	mov	gs:[pLogoTrackNo],(1AF00h-821FFh)	; @ 0x1AF00
+	mov	gs:[pMenuTrackNo],(1AF80h-821FFh)	; @ 0x1AF80
+	mov	gs:[pGOverTrackNo],(1AFA8h-821FFh)	; @ 0x1AFA8
+	mov	gs:[pPlayIntro],(16521h-821FFh)		; @ 0x16521
+	mov	gs:[pPlayOuttro],(33805h-821FFh)	; @ 0x33805
+	; displacements are same as German for these four:
+	mov	gs:[pDoGrowingPlat],(79650h-8220Fh)	; @ 0x79640
+	mov	gs:[pMoskitoLock],(51D45h-8220Fh)	; @ 0x51D35
+	mov	gs:[pMoskitoFast],(58EA4h-8220Fh)	; @ 0x58E94
+	mov	gs:[pMoskitoSlow],(58ECDh-8220Fh)	; @ 0x58EBD
+	; these four are different:
+	mov	gs:[pLevelStart1],(14FF0h-821FFh)	; @ 0x14FF0
+	mov	gs:[pLevelStart2],(156F6h-821FFh)	; @ 0x156F6
+	mov	gs:[pLevelEnd1],(15597h-821FFh)		; @ 0x15597
+	mov	gs:[pLevelEnd2],(15BA6h-821FFh)		; @ 0x15BA6
+	; displacements are same as German for these two:
+	mov	gs:[pExitSign1],(6035Fh-8220Fh)		; @ 0x6034F
+	mov	gs:[pExitSign2],(604BCh-8220Fh)		; @ 0x604AC
+	; these two are different:
+	mov	gs:[pPerdu],(1AF1Eh-821FFh)		; @ 0x1AF1E
+	mov	gs:[pPlayTrack],(28660h-821FFh)		; @ 0x28660
+
+	; This version has DRM that involves checking files on the CD
+	bts	cs:[statusword],2
+	jmp	@@payload_fixedup
+
 @@setup_ptrs_v120de:
 	; Addresses relative to sSOSDIGIInitDriver in Rayman's data section
 	; It's at 0x137634 in this version
@@ -641,12 +823,12 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[ptrack_table],(135F0Bh-137634h)	; @ 0x135F0B
 	mov	gs:[ptimeCd],(135F8Ch-137634h)		; @ 0x135F8C
 	mov	gs:[pcdTime],(16E8ECh-137634h)		; @ 0x16E8EC
-	mov	gs:[prbook_table],(17F957h-137634h)	; @ 0x17F957
+	; mov	gs:[prbook_table],(17F957h-137634h)	; @ 0x17F957
 	mov	gs:[prbook_lentable],(17FAEBh-137634h)	; @ 0x17FAEB
-	mov	gs:[prbook_tablefl],(17FF8Eh-137634h)	; @ 0x17FF8E
-	mov	gs:[plowest_atrack],(17F951h-137634h)	; @ 0x17F951
-	mov	gs:[phighest_atrack],(17F952h-137634h)	; @ 0x17F952
-	mov	gs:[pcd_driveletter],(170AB7h-137634h)	; @ 0x170AB7
+	; mov	gs:[prbook_tablefl],(17FF8Eh-137634h)	; @ 0x17FF8E
+	; mov	gs:[plowest_atrack],(17F951h-137634h)	; @ 0x17F951
+	; mov	gs:[phighest_atrack],(17F952h-137634h)	; @ 0x17F952
+	; mov	gs:[pcd_driveletter],(170AB7h-137634h)	; @ 0x170AB7
 	mov	gs:[plang],(170AC5h-137634h)		; @ 0x170AC5
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
@@ -674,6 +856,91 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	bts	cs:[statusword],2
 	jmp	@@payload_fixedup
 
+@@setup_ptrs_v112us:
+	mov	di,offset unprotected + sizeof unprotected - 1
+	mov	cx,-(sizeof unprotected)
+	call	chk_entete
+	jc	@@setup_ptrs_v112us_unprotected
+
+	; Addresses relative to sSOSDIGIInitDriver in Rayman's data section
+	; It's at 0x137634 in this version
+	mov	gs:[pnum_world],(170780h-137634h)	; @ 0x170780
+	mov	gs:[pnum_level],(17076Eh-137634h)	; @ 0x17076E
+	mov	gs:[ptrack_table],(135EF3h-137634h)	; @ 0x135EF3
+	mov	gs:[ptimeCd],(135F74h-137634h)		; @ 0x135F74
+	mov	gs:[pcdTime],(16E754h-137634h)		; @ 0x16E754
+	; mov	gs:[prbook_table],(17F7C7h-137634h)	; @ 0x17F7C7
+	mov	gs:[prbook_lentable],(19595Bh-137634h)	; @ 0x19595B
+	; mov	gs:[prbook_tablefl],(17FDFEh-137634h)	; @ 0x17FDFE
+	; mov	gs:[plowest_atrack],(17F7C1h-137634h)	; @ 0x17F7C1
+	; mov	gs:[phighest_atrack],(17F7C2h-137634h)	; @ 0x17F7C2
+	; mov	gs:[pcd_driveletter],(17091Bh-137634h)	; @ 0x17091B
+	mov	gs:[plang],(170928h-137634h)		; @ 0x170928
+
+	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
+	; It's at 0x81CA8 in this version
+	mov	gs:[pCreditsTrackNo],(1ADA8h-81CA8h)	; @ 0x1ADA8
+	mov	gs:[pLogoTrackNo],(1ADD0h-81CA8h)	; @ 0x1ADD0
+	mov	gs:[pMenuTrackNo],(1AE50h-81CA8h)	; @ 0x1AE50
+	mov	gs:[pGOverTrackNo],(1AE78h-81CA8h)	; @ 0x1AE78
+	mov	gs:[pIntroTrackNo],(1651Eh-81CA8h)	; @ 0x1651E
+	mov	gs:[pOuttroTrackNo],(33546h-81CA8h)	; @ 0x33546
+	mov	gs:[pDoGrowingPlat],(79180h-81CA8h)	; @ 0x79180
+	mov	gs:[pMoskitoLock],(518A5h-81CA8h)	; @ 0x518A5
+	mov	gs:[pMoskitoFast],(58A04h-81CA8h)	; @ 0x58A04
+	mov	gs:[pMoskitoSlow],(58A2Dh-81CA8h)	; @ 0x58A2D
+	mov	gs:[pLevelStart1],(14FE0h-81CA8h)	; @ 0x14FE0
+	mov	gs:[pLevelStart2],(156E6h-81CA8h)	; @ 0x156E6
+	mov	gs:[pLevelEnd1],(15587h-81CA8h)		; @ 0x15587
+	mov	gs:[pLevelEnd2],(15B96h-81CA8h)		; @ 0x15B96
+	mov	gs:[pExitSign1],(5FEBFh-81CA8h)		; @ 0x5FEBF
+	mov	gs:[pExitSign2],(6001Ch-81CA8h)		; @ 0x6001C
+	mov	gs:[pPerdu],(1ADEEh-81CA8h)		; @ 0x1ADEE
+	mov	gs:[pPlayTrack],(283D8h-81CA8h)		; @ 0x283D8
+
+	; This version has DRM that involves checking files on the CD
+	bts	cs:[statusword],2
+	jmp	@@payload_fixedup
+
+@@setup_ptrs_v112us_unprotected:
+	; Addresses relative to sSOSDIGIInitDriver in Rayman's data section
+	; It's at 0x137634 in this version
+	mov	gs:[pnum_world],(170520h-137634h)	; @ 0x170520
+	mov	gs:[pnum_level],(17050Eh-137634h)	; @ 0x17050E
+	mov	gs:[ptrack_table],(135EF3h-137634h)	; @ 0x135EF3
+	mov	gs:[ptimeCd],(135F74h-137634h)		; @ 0x135F74
+	mov	gs:[pcdTime],(16E4F4h-137634h)		; @ 0x16E4F4
+	; mov	gs:[prbook_table],(17F667h-137634h)	; @ 0x17F667
+	mov	gs:[prbook_lentable],(17F7FBh-137634h)	; @ 0x17F7FB
+	; mov	gs:[prbook_tablefl],(17FB9Bh-137634h)	; @ 0x17FB9B
+	; mov	gs:[plowest_atrack],(17F661h-137634h)	; @ 0x17F661
+	; mov	gs:[phighest_atrack],(17F662h-137634h)	; @ 0x17F662
+	; mov	gs:[pcd_driveletter],(1706BBh-137634h)	; @ 0x1706BB
+	mov	gs:[plang],(1706C8h-137634h)		; @ 0x1706C8
+
+	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
+	; It's at 0x81216 in this version
+	mov	gs:[pCreditsTrackNo],(1AC78h-81216h)	; @ 0x1AC78
+	mov	gs:[pLogoTrackNo],(1ACA0h-81216h)	; @ 0x1ACA0
+	mov	gs:[pMenuTrackNo],(1AD20h-81216h)	; @ 0x1AD20
+	mov	gs:[pGOverTrackNo],(1AD48h-81216h)	; @ 0x1AD48
+	mov	gs:[pIntroTrackNo],(163E8h-81216h)	; @ 0x163E8
+	mov	gs:[pOuttroTrackNo],(333E6h-81216h)	; @ 0x333E6
+	mov	gs:[pDoGrowingPlat],(786E0h-81216h)	; @ 0x786E0
+	mov	gs:[pMoskitoLock],(51715h-81216h)	; @ 0x51715
+	mov	gs:[pMoskitoFast],(58874h-81216h)	; @ 0x58874
+	mov	gs:[pMoskitoSlow],(5889Dh-81216h)	; @ 0x5889D
+	mov	gs:[pLevelStart1],(14FE0h-81216h)	; @ 0x14FE0
+	mov	gs:[pLevelStart2],(156DAh-81216h)	; @ 0x156DA
+	mov	gs:[pLevelEnd1],(1557Bh-81216h)		; @ 0x1557B
+	mov	gs:[pLevelEnd2],(15B7Eh-81216h)		; @ 0x15B7E
+	mov	gs:[pExitSign1],(5FD2Fh-81216h)		; @ 0x5FD2F
+	mov	gs:[pExitSign2],(5FE8Ch-81216h)		; @ 0x5FE8C
+	mov	gs:[pPerdu],(1ACBEh-81216h)		; @ 0x1ACBE
+	mov	gs:[pPlayTrack],(282C4h-81216h)		; @ 0x282C4
+
+	jmp	@@payload_fixedup
+
 @@setup_ptrs_v112eu:
 	; Addresses relative to sSOSDIGIInitDriver in Rayman's data section
 	; It's at 0x137624 in this version
@@ -682,12 +949,12 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[ptrack_table],(135EF3h-137624h)	; @ 0x135EF3
 	mov	gs:[ptimeCd],(135F74h-137624h)		; @ 0x135F74
 	mov	gs:[pcdTime],(16E744h-137624h)		; @ 0x16E744
-	mov	gs:[prbook_table],(17F7B7h-137624h)	; @ 0x17F7B7
+	; mov	gs:[prbook_table],(17F7B7h-137624h)	; @ 0x17F7B7
 	mov	gs:[prbook_lentable],(17F94Bh-137624h)	; @ 0x17F94B
-	mov	gs:[prbook_tablefl],(17FDEEh-137624h)	; @ 0x17FDEE
-	mov	gs:[plowest_atrack],(17F7B1h-137624h)	; @ 0x17F7B1
-	mov	gs:[phighest_atrack],(17F7B2h-137624h)	; @ 0x17F7B2
-	mov	gs:[pcd_driveletter],(17090Bh-137624h)	; @ 0x17090B
+	; mov	gs:[prbook_tablefl],(17FDEEh-137624h)	; @ 0x17FDEE
+	; mov	gs:[plowest_atrack],(17F7B1h-137624h)	; @ 0x17F7B1
+	; mov	gs:[phighest_atrack],(17F7B2h-137624h)	; @ 0x17F7B2
+	; mov	gs:[pcd_driveletter],(17090Bh-137624h)	; @ 0x17090B
 	mov	gs:[plang],(170918h-137624h)		; @ 0x170918
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
@@ -713,6 +980,104 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
+	jmp	@@payload_fixedup
+
+@@setup_ptrs_v110eu:
+	; Addresses relative to sSOSDIGIInitDriver in Rayman's data section
+	; It's at 0x137624 in this version
+	mov	gs:[pnum_world],(170720h-137624h)	; @ 0x170720
+	mov	gs:[pnum_level],(17070Eh-137624h)	; @ 0x17070E
+	mov	gs:[ptrack_table],(135EF3h-137624h)	; @ 0x135EF3
+	mov	gs:[ptimeCd],(135F74h-137624h)		; @ 0x135F74
+	mov	gs:[pcdTime],(16E6F4h-137624h)		; @ 0x16E6F4
+	; mov	gs:[prbook_table],(17F767h-137624h)	; @ 0x17F767
+	mov	gs:[prbook_lentable],(17F8FBh-137624h)	; @ 0x17F8FB
+	; mov	gs:[prbook_tablefl],(17FD9Eh-137624h)	; @ 0x17FD9E
+	; mov	gs:[plowest_atrack],(17F761h-137624h)	; @ 0x17F761
+	; mov	gs:[phighest_atrack],(17F762h-137624h)	; @ 0x17F762
+	; mov	gs:[pcd_driveletter],(1708BBh-137624h)	; @ 0x1708BB
+	mov	gs:[plang],(1708C8h-137624h)		; @ 0x1708C8
+
+	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
+	; It's at 0x81678 in this version
+	mov	gs:[pCreditsTrackNo],(1ADD8h-81678h)	; @ 0x1ADD8
+	mov	gs:[pLogoTrackNo],(1AE00h-81678h)	; @ 0x1AE00
+	mov	gs:[pMenuTrackNo],(1AE80h-81678h)	; @ 0x1AE80
+	mov	gs:[pGOverTrackNo],(1AEA8h-81678h)	; @ 0x1AEA8
+	mov	gs:[pIntroTrackNo],(16552h-81678h)	; @ 0x16552
+	mov	gs:[pOuttroTrackNo],(33546h-81678h)	; @ 0x33546
+	mov	gs:[pDoGrowingPlat],(78B50h-81678h)	; @ 0x78B50
+	mov	gs:[pMoskitoLock],(510B5h-81678h)	; @ 0x510B5
+	mov	gs:[pMoskitoFast],(58214h-81678h)	; @ 0x58214
+	mov	gs:[pMoskitoSlow],(5823Dh-81678h)	; @ 0x5823D
+	mov	gs:[pLevelStart1],(15050h-81678h)	; @ 0x15050
+	mov	gs:[pLevelStart2],(15756h-81678h)	; @ 0x15756
+	mov	gs:[pLevelEnd1],(155F7h-81678h)		; @ 0x155F7
+	mov	gs:[pLevelEnd2],(15C06h-81678h)		; @ 0x15C06
+	mov	gs:[pExitSign1],(5F6CFh-81678h)		; @ 0x5F6CF
+	mov	gs:[pExitSign2],(5F82Ch-81678h)		; @ 0x5F82C
+	mov	gs:[pPerdu],(1AE1Eh-81678h)		; @ 0x1AE1E
+	mov	gs:[pPlayTrack],(28408h-81678h)		; @ 0x28408
+	mov	gs:[pEvilBiosChk1],(26659h-81678h)	; @ 0x26659
+	mov	gs:[pEvilBiosChk2],(71D1Ah-81678h)	; @ 0x71D1A
+	mov	gs:[pEvilVBiosChk1],(34810h-81678h)	; @ 0x34810
+	mov	gs:[pEvilVBiosChk2],(72028h-81678h)	; @ 0x72028
+
+	; This version has DRM that involves checking files on the CD
+	bts	cs:[statusword],2
+	; And another involving the metadata!
+	bts	cs:[statusword],7
+	; And it expects a very specific length of data on the CD...
+	mov	cs:[spoof_info.addr_leadout],401D18h
+	jmp	@@payload_fixedup
+
+@@setup_ptrs_v100:
+	; Addresses relative to sSOSDIGIInitDriver in Rayman's data section
+	; It's at 0x137584 in this version
+	mov	gs:[pnum_world],(170282h-137584h)	; @ 0x170282
+	mov	gs:[pnum_level],(170270h-137584h)	; @ 0x170270
+	mov	gs:[ptrack_table],(135EF3h-137584h)	; @ 0x135EF3
+	mov	gs:[ptimeCd],(135F74h-137584h)		; @ 0x135F74
+	mov	gs:[pcdTime],(16E2ACh-137584h)		; @ 0x16E2AC
+	; mov	gs:[prbook_table],(17F3C7h-137584h)	; @ 0x17F3C7
+	mov	gs:[prbook_lentable],(17F55Bh-137584h)	; @ 0x17F55B
+	; mov	gs:[prbook_tablefl],(17F8FCh-137584h)	; @ 0x17F8FC
+	; mov	gs:[plowest_atrack],(17F3C1h-137584h)	; @ 0x17F3C1
+	; mov	gs:[phighest_atrack],(17F3C2h-137584h)	; @ 0x17F3C2
+	; mov	gs:[pcd_driveletter],(170419h-137584h)	; @ 0x170419
+	mov	gs:[plang],(170428h-137584h)		; @ 0x170428
+
+	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
+	; It's at 0x81548 in this version
+	mov	gs:[pCreditsTrackNo],(1AB7Ch-81548h)	; @ 0x1AB7C
+	mov	gs:[pLogoTrackNo],(1ABA4h-81548h)	; @ 0x1ABA4
+	mov	gs:[pMenuTrackNo],(1AC24h-81548h)	; @ 0x1AC24
+	mov	gs:[pGOverTrackNo],(1AC4Ch-81548h)	; @ 0x1AC4C
+	mov	gs:[pIntroTrackNo],(16392h-81548h)	; @ 0x16392
+	mov	gs:[pOuttroTrackNo],(33992h-81548h)	; @ 0x33992
+	mov	gs:[pDoGrowingPlat],(78AC0h-81548h)	; @ 0x78AC0
+	mov	gs:[pMoskitoLock],(51105h-81548h)	; @ 0x51105
+	mov	gs:[pMoskitoFast],(58250h-81548h)	; @ 0x58250
+	mov	gs:[pMoskitoSlow],(58279h-81548h)	; @ 0x58279
+	mov	gs:[pLevelStart1],(150F0h-81548h)	; @ 0x150F0
+	mov	gs:[pLevelStart2],(1571Bh-81548h)	; @ 0x1571B
+	mov	gs:[pLevelEnd1],(155BDh-81548h)		; @ 0x155BD
+	mov	gs:[pLevelEnd2],(15B9Ch-81548h)		; @ 0x15B9C
+	mov	gs:[pExitSign1],(5F58Fh-81548h)		; @ 0x5F58F
+	mov	gs:[pExitSign2],(5F6ECh-81548h)		; @ 0x5F6EC
+	mov	gs:[pPerdu],(1ABC2h-81548h)		; @ 0x1ABC2
+	mov	gs:[pPlayTrack],(28868h-81548h)		; @ 0x28868
+	mov	gs:[pEvilBiosChk1],(34A99h-81548h)	; @ 0x34A99
+	mov	gs:[pEvilBiosChk2],(71CBAh-81548h)	; @ 0x71CBA
+	mov	gs:[pEvilVBiosChk1],(34C50h-81548h)	; @ 0x34C50
+	mov	gs:[pEvilVBiosChk2],(71FB1h-81548h)	; @ 0x71FB1
+
+	; This version has DRM that involves checking files on the CD
+	bts	cs:[statusword],2
+	; And another involving the metadata!
+	bts	cs:[statusword],7
+	; And it expects a very specific length of data on the CD...
+	mov	cs:[spoof_info.addr_leadout],401E19h
 
 @@payload_fixedup:
 	; Next we need to open up Rayman's config file and get the driver ID
@@ -1208,8 +1573,44 @@ tpls_int2f	proc
 	bt	cs:[statusword],1	; redirects active?
 	jnc	@@mscdex_noredir
 
+	bt	cs:[statusword],7	; spoofing active?
+	jnc	@F
+
+	; GET COPYRIGHT / ABSTRACT / BIBLIOGRAPHIC DOC FILENAME
+	.if	(al >= 2) && (al <= 4)
+	   ; Write "RAYMAN" in the buffer
+	   mov	dword ptr es:[bx], "MYAR"
+	   mov	word ptr es:[bx+4],"NA"
+	   mov	byte ptr es:[bx+6],0
+
+	   ; in a moment, Rayman will also check the audio info
+	   bts	cs:[statusword],8	; so have the right answer ready!
+	   jmp	@@return_success
+	.endif
+
+@@:
 	cmp	al,10h		; send driver request
 	jne	@@passthrough
+
+	bt	cs:[statusword],8	; spoofing needed?
+	jnc	@F
+
+	.if	es:[bx.IOCTLRW.bCmd] == 3; IOCTL INPUT
+	   cmp	es:[bx.IOCTLRW.wCount],size AudioDiscInfo
+	   jb	@@passthrough	; bad request, let MSCDEX deal with it
+
+	   push	es
+	   push	di
+	   les	di,dword ptr es:[bx.IOCTLRW.wBufOff]
+	   cmp	byte ptr es:[di],0Ah	; Audio Disc Info
+	   je	@@audinfo
+
+	   pop	di
+	   pop	es
+	   jmp	@@passthrough
+	.endif
+
+@@:
 	cmp	es:[bx.IOCTLRW.bCmd],84h; PLAY AUDIO
 	jne	@@passthrough
 
@@ -1241,6 +1642,29 @@ tpls_int2f	proc
 
 @@:
 	iret	; go straight back to the hooked int 31h
+
+@@audinfo:
+	; clear this bit so the next request won't be spoofed!
+	btr	cs:[statusword],8
+
+	push	si
+	lea	si,spoof_info
+	; move seven bytes = 4+2+1
+	movsd	es:[di],cs:[si]
+	movsw	es:[di],cs:[si]
+	movsb	es:[di],cs:[si]
+
+	pop	si
+	pop	di
+	pop	es
+
+@@return_success:
+	; return with CF clear
+	push	bp
+	mov	bp,sp
+	btr	word ptr [bp+6],0	; Flags = BP+6 since we've got the pushed BP
+	pop	bp
+	iret
 tpls_int2f	endp
 stubdos	ends
 
@@ -1363,6 +1787,10 @@ payload	segment use32
 	; (i.e. long after the CD init code is over and done with)
 	call	setup_tracklens
 	call	setup_hooks
+
+	cmp	[pEvilBiosChk1],0
+	jz	@@passthrough
+	call	bypass_evil_checks
 
 @@passthrough:
 	pop	gs
@@ -1640,13 +2068,13 @@ setup_tracknos	proc near	uses es eax ebx edx
 	mov	edx,[pIntroTrackNo]
 	test	edx,edx
 	jz	@F
-	mov	al,52
+	mov	al,FIRSTINTROTRACK
 	call	poketext
 
 	mov	edx,[pOuttroTrackNo]
 	test	edx,edx
 	jz	@F
-	mov	al,55
+	mov	al,FIRSTOUTROTRACK
 	call	poketext
 
 @@:
@@ -1727,6 +2155,29 @@ setup_hooks	proc near	uses ecx edx
 @@:
 	ret
 setup_hooks	endp
+
+; replace conditional jumps over BIOS checksum checks with unconditional ones
+bypass_evil_checks	proc near	uses es eax ebx edx
+	mov	ebx,1			; poking single bytes
+
+	mov	al,0EBh			; jmp short
+	mov	edx,[pEvilBiosChk1]
+	call	poketext
+
+	mov	al,0EBh			; jmp short
+	mov	edx,[pEvilBiosChk2]
+	call	poketext
+
+	mov	al,0EBh			; jmp short
+	mov	edx,[pEvilVBiosChk1]
+	call	poketext
+
+	mov	al,0EBh			; jmp short
+	mov	edx,[pEvilVBiosChk2]
+	call	poketext
+
+	ret
+bypass_evil_checks	endp
 
 ; Get the stub segment into GS
 ; CF clear on success, set on failure
@@ -1936,6 +2387,11 @@ pExitSign1	dd ?	; Rayman reaches an exit sign, so a fanfare should play
 pExitSign2	dd ?
 pPerdu		dd ?	; Rayman is dead, so his death track should play
 pPlayTrack	dd ?	; Function in Rayman's code for playing a numbered CD audio track
+; Conditional jumps over evil checks of the BIOS ROM (seg F000) and video ROM (seg C000) WLD file checksum
+pEvilBiosChk1	dd ?
+pEvilBiosChk2	dd ?
+pEvilVBiosChk1	dd ?
+pEvilVBiosChk2	dd ?
 end_textptrs:
 
 ; Pointers to data in Rayman
@@ -1945,12 +2401,12 @@ pnum_level	dd ?
 ptrack_table	dd ?	; Pointer to level track assignment table (static)
 ptimeCd		dd ?
 pcdTime		dd ?	; How long has the track been playing? Set to zero to restart.
-prbook_table	dd ?	; Pointer to table of Redbook track info (populated @ runtime)
+;prbook_table	dd ?	; Pointer to table of Redbook track info (populated @ runtime)
 prbook_lentable	dd ?
-prbook_tablefl	dd ?	; Pointer to flag indicating latter table is populated
-plowest_atrack	dd ?
-phighest_atrack	dd ?
-pcd_driveletter dd ?	; Pointer to Rayman's CD-ROM drive letter
+;prbook_tablefl	dd ?	; Pointer to flag indicating latter table is populated
+;plowest_atrack	dd ?
+;phighest_atrack	dd ?
+;pcd_driveletter dd ?	; Pointer to Rayman's CD-ROM drive letter
 plang		dd ?
 end_dataptrs:
 
@@ -2393,11 +2849,11 @@ hook_handler	proc
 @@cutscene:
 	mov	ecx,[plang]
 	mov	bl,es:[ecx]		; BL contains the track number passed to the cutscene function
-	add	bl,52			; first intro track on custom CD image
+	add	bl,FIRSTINTROTRACK	; first intro track on custom CD image
 
 	cmp	eax,[pPlayOuttro]
 	jne	@@retpoint
-	add	bl,3			; add three more to get outtro track
+	add	bl,NUMINTROTRACKS	; add five more to get outtro track
 	jmp	@@retpoint
 hook_handler	endp
 

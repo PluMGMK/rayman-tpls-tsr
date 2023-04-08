@@ -173,6 +173,7 @@ hmidrv_buffer	db BUFSIZE dup (?)
 ; Bit 6 = Running on Win9x
 ; Bit 7 = Spoof Copyright / Abstract / Bibliographic Filenames
 ; Bit 8 = Next Audio Disc Info Request should return spoofed data
+; Bit 9 = Win9x int 31h handler should return immediately after calling RM int 2Fh
 statusword	dw 0
 
 emshdl		dw 0
@@ -1789,6 +1790,12 @@ tpls_int2f	proc
 	pop	es
 
 @@return_success:
+	; if we're on Win9x, signal to the int 31h handler that it should IRET immediately
+	bt	cs:[statusword],6
+	jnc	@F
+	bts	cs:[statusword],9
+
+@@:
 	; return with CF clear
 	push	bp
 	mov	bp,sp
@@ -3237,6 +3244,9 @@ tpls_int31	proc
 	push	bx
 	push	cx
 
+	; Make sure this is clear now in case there is somehow a stale value there
+	btr	ds:[statusword],9
+
 	; To avoid duplicating program logic, just pass this through to Real Mode
 	mov	ax,302h	; call Real Mode procedure w/IRET frame
 	xor	bx,bx
@@ -3251,11 +3261,17 @@ tpls_int31	proc
 	pop	ax
 
 @@done:
+	; Check if RM handler wants us to IRET immediately
+	btr	ds:[statusword],9
 	pop	ds
 	assume	ds:nothing
+	jc	@F	; CF set by BTR above
 
 @@go_old:
 	jmp	old_int31
+
+@@:
+	iretd
 tpls_int31	endp
 extra9x	ends
 

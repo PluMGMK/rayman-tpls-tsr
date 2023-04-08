@@ -2,7 +2,7 @@
 
 ; MIT License
 ; 
-; Copyright (c) 2022 PluMGMK
+; Copyright (c) 2022, 2023 PluMGMK
 ; 
 ; Permission is hereby granted, free of charge, to any person obtaining a copy
 ; of this software and associated documentation files (the "Software"), to deal
@@ -186,6 +186,7 @@ hmidrv		db "hmidrv.386",0
 fakehmidrv	db "tplsdrv.386",0
 
 raycfg		db "rayman.cfg",0
+ray1wld		db "pcmap\ray1.wld",0
 
 ; Files that Rayman may look for on the CD
 raymanexe	db "\rayman\rayman.exe",0
@@ -205,6 +206,15 @@ emserr		db 33o,"[35m","EMS error occurred. Unable to proceed with payload inject
 noextratracks	db 33o,"[35m","Warning: CD in drive "
 noextratracks_letter db ?,": does not have intro/outtro tracks.",13,10
 		db "Intro and/or outtro cutscenes may be silent!",33o,"[37m",13,10,"$"
+wrongvolumelabel db 33o,"[35m","CD in drive "
+wrongvolumelabel_letter db ?,": does not have volume label 'RAYMAN', not using.",13,10
+		db "Note that this only matters for Rayman v1.00 and v1.10, so you can rectify this",13,10
+		db "by playing a newer version, or by using the latest TPLS CD image (which should",13,10
+		db "be correctly labelled).",33o,"[37m",13,10,"$"
+badbioschecksums db 33o,"[35m","Your BIOS and/or Video BIOS checksum(s) do not match what is in RAY1.WLD,",13,10
+		db "which means that the game will think it is being played on a different",13,10
+		db "machine to the one it was originally installed on, and not work properly!",13,10
+		db "To fix this, cd into the PCMAP folder and run FIXWLDS.EXE (comes with the TSR).",33o,"[37m",13,10,"$"
 toomanydatatracks db 33o,"[35m","CD in drive "
 toomanydatatracks_letter db ?,": has too many data tracks, not using.",33o,"[37m",13,10,"$"
 notenoughaudiotracks db 33o,"[35m","CD in drive "
@@ -1018,10 +1028,6 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[pExitSign2],(5F82Ch-81678h)		; @ 0x5F82C
 	mov	gs:[pPerdu],(1AE1Eh-81678h)		; @ 0x1AE1E
 	mov	gs:[pPlayTrack],(28408h-81678h)		; @ 0x28408
-	mov	gs:[pEvilBiosChk1],(26659h-81678h)	; @ 0x26659
-	mov	gs:[pEvilBiosChk2],(71D1Ah-81678h)	; @ 0x71D1A
-	mov	gs:[pEvilVBiosChk1],(34810h-81678h)	; @ 0x34810
-	mov	gs:[pEvilVBiosChk2],(72028h-81678h)	; @ 0x72028
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -1059,7 +1065,7 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[pMoskitoLock],(51105h-81548h)	; @ 0x51105
 	mov	gs:[pMoskitoFast],(58250h-81548h)	; @ 0x58250
 	mov	gs:[pMoskitoSlow],(58279h-81548h)	; @ 0x58279
-	mov	gs:[pLevelStart1],(150F0h-81548h)	; @ 0x150F0
+	mov	gs:[pLevelStart1],(15058h-81548h)	; @ 0x15058
 	mov	gs:[pLevelStart2],(1571Bh-81548h)	; @ 0x1571B
 	mov	gs:[pLevelEnd1],(155BDh-81548h)		; @ 0x155BD
 	mov	gs:[pLevelEnd2],(15B9Ch-81548h)		; @ 0x15B9C
@@ -1067,10 +1073,6 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[pExitSign2],(5F6ECh-81548h)		; @ 0x5F6EC
 	mov	gs:[pPerdu],(1ABC2h-81548h)		; @ 0x1ABC2
 	mov	gs:[pPlayTrack],(28868h-81548h)		; @ 0x28868
-	mov	gs:[pEvilBiosChk1],(34A99h-81548h)	; @ 0x34A99
-	mov	gs:[pEvilBiosChk2],(71CBAh-81548h)	; @ 0x71CBA
-	mov	gs:[pEvilVBiosChk1],(34C50h-81548h)	; @ 0x34C50
-	mov	gs:[pEvilVBiosChk2],(71FB1h-81548h)	; @ 0x71FB1
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -1305,11 +1307,11 @@ chk_suitablecd	proc near	uses ds ax cx es bx dx
 	bt	es:[bx.IOCTLRW.wStatus],0Fh	; error?
 	jc	@@cleanupstack
 
-	cmp	[bp.AudioDiscInfo.first_audtrack],2
+	cmp	[bp.AudioDiscInfo.first_audtrack],1
 	ja	@@toomanydatatracks
 	cmp	[bp.AudioDiscInfo.last_audtrack],51
 	jb	@@notenoughaudiotracks
-	cmp	[bp.AudioDiscInfo.last_audtrack],57
+	cmp	[bp.AudioDiscInfo.last_audtrack],62
 	jnb	@F
 
 	mov	[noextratracks_letter],dl
@@ -1318,6 +1320,19 @@ chk_suitablecd	proc near	uses ds ax cx es bx dx
 	mov	ah,9	; write to stdout
 	pushf
 	call	old_int21
+
+@@:
+	bt	[statusword],7			; extra DRM?
+	jnc	@F
+
+	; Rayman v1.00 and v1.10 have extra DRMs, which we won't bypass,
+	; but we will make them more upfront, and explain how the user
+	; can rectify the situation.
+	call	chk_vollabel
+	jc	@@wrongvolumelabel
+
+	call	chk_biossums
+	jc	@@badbioschecksums
 
 @@:
 	mov	[suitable_cddrv],dl
@@ -1331,6 +1346,14 @@ chk_suitablecd	proc near	uses ds ax cx es bx dx
 	rcr	al,1	; restore carry
 	ret
 
+@@wrongvolumelabel:
+	mov	[wrongvolumelabel_letter],dl
+	sub	[wrongvolumelabel_letter],20h	; make uppercase!
+	mov	dx,offset wrongvolumelabel
+	jmp	@F
+@@badbioschecksums:
+	mov	dx,offset badbioschecksums
+	jmp	@F
 @@toomanydatatracks:
 	mov	[toomanydatatracks_letter],dl
 	sub	[toomanydatatracks_letter],20h	; make uppercase!
@@ -1349,6 +1372,110 @@ chk_suitablecd	proc near	uses ds ax cx es bx dx
 
 	assume	ds:nothing
 chk_suitablecd	endp
+
+; Takes drive letter in DL
+; Returns with Carry set if volume label is not "RAYMAN"
+chk_vollabel	proc near	uses eax es bx cx ds dx
+	movzx	eax,dl
+	or	eax,('\' SHL 10h) + (':' SHL 8)
+	push	eax		; Now SS:[SP] = "X:\",0
+
+	mov	ax,4E00h	; FINDFIRST
+	mov	cx,8		; volume label attribute
+	push	ss
+	pop	ds
+	assume	ds:nothing
+	mov	dx,sp		; drive letter on stack
+	pushf
+	call	old_int21
+	add	sp,4		; clean it up
+
+	mov	ah,2Fh		; get DTA
+	pushf
+	call	old_int21
+	assume	es:nothing
+
+	; ASCIZ volume label is now at ES:[BX+1Eh]
+	cmp	dword ptr es:[bx+1Eh], "MYAR"
+	jne	@@bad
+	cmp	word ptr es:[bx+1Eh+4],"NA"
+	jne	@@bad
+	cmp	byte ptr es:[bx+1Eh+6],0
+	jne	@@bad
+	; Successful comparison will have cleared CF for us
+@@:
+	ret
+
+@@bad:
+	stc
+	ret
+chk_vollabel	endp
+
+; Checks if the BIOS and VBIOS checksums in the WLD files match the current PC
+; Returns with Carry set if they don't match
+chk_biossums	proc near	uses bp ax bx cx dx es si di
+	assume	ds:stub	; called from within chk_suitablecd
+
+	xor	bp,bp		; place a zero on the stack,
+	push	bp		; to be overwritten with checksums
+	mov	bp,sp
+
+	mov	ax,3D00h	; OPEN read-only
+	mov	dx,offset ray1wld
+	pushf
+	call	old_int21
+	jc	@@done
+
+	mov	bx,ax
+	mov	ax,4200h	; LSEEK from beginning of file
+	xor	cx,cx
+	mov	dx,5		; seek to position 5 (checksums)
+	pushf
+	call	old_int21
+	jc	@F
+
+	mov	ah,3Fh		; READ
+	mov	cx,2		; two checksums
+	push	ds
+	push	ss
+	pop	ds		; read them onto the stack
+	assume	ds:nothing
+	mov	dx,bp
+	pushf
+	call	old_int21
+	pop	ds
+	assume	ds:stub
+
+@@:
+	mov	ah,3Eh		; CLOSE
+	pushf
+	call	old_int21
+
+	mov	ax,0F000h	; BIOS ROM
+	xor	di,di
+@@nextrom:
+	mov	es,ax
+	xor	si,si
+	mov	cx,1000h	; check the first page
+@@:
+	lods	byte ptr es:[si]
+	sub	[bp+di],al
+	loop	@B
+	jz	@F
+
+	stc	; no match
+	jmp	@@done
+@@:
+	mov	ax,0C000h	; Video BIOS ROM
+	inc	di
+	cmp	di,2
+	jb	@@nextrom
+	; If JB is not taken, that means CF is clear, so we return success
+
+@@done:
+	lea	sp,[bp+2]
+	ret
+chk_biossums	endp
 
 tpls_int21	proc
 	assume	ds:nothing,es:nothing
@@ -1520,6 +1647,9 @@ tpls_int21	proc
 	; Likewise for Bit 6, meaning running on Windows 9x.
 	; Other bits reset for a new run.
 	and	[statusword],41h
+	; Reset this too, to make sure we go through whatever rigmarole
+	; is needed if another version is launched in the same session!
+	mov	[suitable_cddrv],0
 
 	mov	dx,offset fakehmidrv
 	mov	ah,41h	; UNLINK
@@ -1787,10 +1917,6 @@ payload	segment use32
 	; (i.e. long after the CD init code is over and done with)
 	call	setup_tracklens
 	call	setup_hooks
-
-	cmp	[pEvilBiosChk1],0
-	jz	@@passthrough
-	call	bypass_evil_checks
 
 @@passthrough:
 	pop	gs
@@ -2156,29 +2282,6 @@ setup_hooks	proc near	uses ecx edx
 	ret
 setup_hooks	endp
 
-; replace conditional jumps over BIOS checksum checks with unconditional ones
-bypass_evil_checks	proc near	uses es eax ebx edx
-	mov	ebx,1			; poking single bytes
-
-	mov	al,0EBh			; jmp short
-	mov	edx,[pEvilBiosChk1]
-	call	poketext
-
-	mov	al,0EBh			; jmp short
-	mov	edx,[pEvilBiosChk2]
-	call	poketext
-
-	mov	al,0EBh			; jmp short
-	mov	edx,[pEvilVBiosChk1]
-	call	poketext
-
-	mov	al,0EBh			; jmp short
-	mov	edx,[pEvilVBiosChk2]
-	call	poketext
-
-	ret
-bypass_evil_checks	endp
-
 ; Get the stub segment into GS
 ; CF clear on success, set on failure
 ; Sets it up if it isn't already there - in this case, DS must point to payload!
@@ -2387,11 +2490,6 @@ pExitSign1	dd ?	; Rayman reaches an exit sign, so a fanfare should play
 pExitSign2	dd ?
 pPerdu		dd ?	; Rayman is dead, so his death track should play
 pPlayTrack	dd ?	; Function in Rayman's code for playing a numbered CD audio track
-; Conditional jumps over evil checks of the BIOS ROM (seg F000) and video ROM (seg C000) WLD file checksum
-pEvilBiosChk1	dd ?
-pEvilBiosChk2	dd ?
-pEvilVBiosChk1	dd ?
-pEvilVBiosChk2	dd ?
 end_textptrs:
 
 ; Pointers to data in Rayman
@@ -2936,7 +3034,6 @@ openredir_9x	proc near
 	add	bp,0Eh		; BP+retaddr+AX+CX+DI+SI+ES = 7 words = 14 bytes
 	bts	word ptr[bp+4],8; trap flag
 	pop	bp
-	;jc	@@retpoint	; skip int1 hook if trap flag already set!
 
 	push	bx
 	mov	ax,3501h	; get #DB vector

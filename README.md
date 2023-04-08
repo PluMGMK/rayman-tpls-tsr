@@ -20,7 +20,23 @@ However, it also means that unlike the other implementations, a custom CD image 
 |Can be used with custom Dosbox builds | No (unless you search for pointers and [compile TPLS yourself](https://github.com/Snaggly/Rayman1Dos-TPLS/blob/master/OffsetList.h)) | No (unless you apply the [patch](https://raymanpc.com/forum/viewtopic.php?f=89&t=28341) and compile Dosbox yourself) | Yes, no recompilation needed! |
 |Can be used on Windows 3.x / 9x | No | No | Yes |
 |Can be used on pure DOS | No | No | Yes |
-|Rayman versions supported | All versions mentioned [here](https://github.com/RayCarrot/RayCarrot.RCP.Metro/blob/2e5ace35ba8d064dc7a592d9700aa311853b6deb/RayCarrot.RCP.Metro/Utilities/Games/Rayman%201/TPLS/TPLSRaymanVersion.cs) | All versions mentioned [here](https://github.com/RayCarrot/RayCarrot.RCP.Metro/blob/2e5ace35ba8d064dc7a592d9700aa311853b6deb/RayCarrot.RCP.Metro/Utilities/Games/Rayman%201/TPLS/TPLSRaymanVersion.cs) | v1.12 US and EU, v1.20 German and IT-SP-DU, v1.21 US – if you need another version added, please get in touch!|
+|Rayman versions supported | All versions mentioned [here](https://github.com/RayCarrot/RayCarrot.RCP.Metro/blob/2e5ace35ba8d064dc7a592d9700aa311853b6deb/RayCarrot.RCP.Metro/Utilities/Games/Rayman%201/TPLS/TPLSRaymanVersion.cs) | All versions mentioned [here](https://github.com/RayCarrot/RayCarrot.RCP.Metro/blob/2e5ace35ba8d064dc7a592d9700aa311853b6deb/RayCarrot.RCP.Metro/Utilities/Games/Rayman%201/TPLS/TPLSRaymanVersion.cs), plus v1.12 US UNPROTECTED | See below |
+
+### Supported Rayman versions
+
+These are all existing Rayman versions of which I am aware, and the TSR has been tested with each one to a certain extent. It "works" with all of them, but for some of them there may be some glitches that occur deeper in the game which I'm not aware of.
+
+* "RAYMAN (US) v1.21"
+* "RAYMAN (FR) v1.21"
+* "RAYMAN (CH) v1.21"
+* "RAYMAN (JP) v1.20"
+* "RAYMAN (UK) v1.20"
+* "RAYMAN (GERMAN) v1.20"
+* "RAYMAN (IT-SP-DU) v1.20"
+* "RAYMAN (US) v1.12" (both "UNPROTECTED" and normal version)
+* "RAYMAN (EU) v1.12"
+* "RAYMAN (EU) v1.10"
+* "RAYMAN v1.00"
 
 ## Installation and usage
 

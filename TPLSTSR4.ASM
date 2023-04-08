@@ -1311,7 +1311,7 @@ chk_suitablecd	proc near	uses ds ax cx es bx dx
 	ja	@@toomanydatatracks
 	cmp	[bp.AudioDiscInfo.last_audtrack],51
 	jb	@@notenoughaudiotracks
-	cmp	[bp.AudioDiscInfo.last_audtrack],62
+	cmp	[bp.AudioDiscInfo.last_audtrack],61
 	jnb	@F
 
 	mov	[noextratracks_letter],dl

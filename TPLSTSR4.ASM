@@ -602,6 +602,8 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[pLogoTrackNo],(0CF70h-73D6Dh)	; @ 0xCF70 in the text section
 	mov	gs:[pMenuTrackNo],(0CFF0h-73D6Dh)	; @ 0xCFF0 in the text section
 	mov	gs:[pGOverTrackNo],(0D018h-73D6Dh)	; @ 0xD018 in the text section
+	mov	gs:[pPlayIntro],(8594h-73D6Dh)		; @ 0x8594 in the text section
+	mov	gs:[pPlayOuttro],(258B5h-73D6Dh)	; @ 0x258B5 in the text section
 	mov	gs:[pDoGrowingPlat],(6B1A0h-73D6Dh)	; @ 0x6B1A0 in the text section
 	mov	gs:[pMoskitoLock],(43D35h-73D6Dh)	; @ 0x43D35 in the text section
 	mov	gs:[pMoskitoFast],(4AE94h-73D6Dh)	; @ 0x4AE94 in the text section
@@ -614,6 +616,7 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[pExitSign2],(524ACh-73D6Dh)		; @ 0x524AC in the text section
 	mov	gs:[pPerdu],(0CF8Eh-73D6Dh)		; @ 0xCF8E in the text section
 	mov	gs:[pPlayTrack],(1A710h-73D6Dh)		; @ 0x1A710 in the text section
+	mov	gs:[pCutsceneRead],(2A55Ch-73D6Dh)	; @ 0x2A55C in the text section
 
 	jmp	@@payload_fixedup
 
@@ -2285,6 +2288,12 @@ setup_hooks	proc near	uses ecx edx
 	jz	@F
 	call	set_hookpoint
 
+@@:	; Hook to fix the stupid _dos_read wrapper that crashes the game
+	mov	edx,[pCutsceneRead]
+	test	edx,edx
+	jz	@F
+	call	set_hookpoint
+
 @@:
 	ret
 setup_hooks	endp
@@ -2497,6 +2506,7 @@ pExitSign1	dd ?	; Rayman reaches an exit sign, so a fanfare should play
 pExitSign2	dd ?
 pPerdu		dd ?	; Rayman is dead, so his death track should play
 pPlayTrack	dd ?	; Function in Rayman's code for playing a numbered CD audio track
+pCutsceneRead	dd 0	; A wrapper function for _dos_read which is broken in v1.21 US
 end_textptrs:
 
 ; Pointers to data in Rayman
@@ -2808,6 +2818,9 @@ hook_handler	proc
 	cmp	eax,[pPlayOuttro]
 	je	@@cutscene
 
+	cmp	eax,[pCutsceneRead]
+	je	@@cutscene_read
+
 	; Dunno what hookpoint that was then...
 @@retpoint:
 	pop	ecx
@@ -2959,6 +2972,41 @@ hook_handler	proc
 	cmp	eax,[pPlayOuttro]
 	jne	@@retpoint
 	add	bl,NUMINTROTRACKS	; add five more to get outtro track
+	jmp	@@retpoint
+
+; Rayman v1.21 US is trying to read from a cutscene file using botched code - do it properly!
+@@cutscene_read:
+	; First of all, this hookpoint can be triggered as many times as we like;
+	; no need to deactivate it until the next MSCDEX call...
+	mov	cx,-1
+	xchg	cx,[cur_trig_hook]
+	; Call hook_activate to undo the deactivation that was done in the boilerplate above.
+	call	hook_activate
+	; Bypass the function by changing our own return point to its RET instruction
+	add	dword ptr [ebp],(2A577h-2A55Ch)
+
+	; Now actually do the read syscall which Rayman was trying to do.
+	; Arguments:	EAX = file handle
+	;		EDX = buffer
+	;		EBX = count
+	mov	ah,3Fh		; READ
+	mov	ecx,ebx		; count
+	; Need to fetch EAX value from the stack...
+	xchg	ebx,[esp+4]
+	; EDX is already set
+	push	es		; Rayman's DS
+	pop	ds
+	assume	ds:nothing
+	; Do it!
+	int	21h
+
+	; Get EBX back
+	mov	ebx,[esp+4]
+	; Set return code for EAX to zero (success)
+	mov	dword ptr [esp+4],0
+	jnc	@@retpoint
+	; If the int 21h failed, change that to -6
+	mov	dword ptr [esp+4],-6
 	jmp	@@retpoint
 hook_handler	endp
 
@@ -3135,11 +3183,11 @@ tpls_dbhandler	proc
 	pushf
 	push	[dpmi_entry]
 	jmp	old_dbvec
-	;; Enter Protected Mode ourselves!
-	;call	[dpmi_entry]
 @@:
+	; Attached debugger returns to the DPMI entry point, which returns to us.
 	jc	@F
 
+	; If CF is clear, it means we have successfully entered Protected Mode!
 	push	bp
 	mov	bp,sp
 	pushf
@@ -3423,11 +3471,6 @@ entry:
 	jmp	@@exitwitherr
 
 @@:
-	;mov	ax,1600h; Windows enhanced-mode inst check
-	;int	2Fh
-	;cmp	al,4
-	;jne	@F
-
 	bt	[statusword],6
 	jnc	@F
 

@@ -1910,6 +1910,7 @@ payload	segment use32
 	je	@F	; no need for alias
 
 	mov	ax,0Ah	; create alias
+	mov	bx,cs:[rayman_cs]
 	int	31h
 
 @@:

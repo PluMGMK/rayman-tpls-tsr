@@ -45,16 +45,67 @@ rmcall STRUCT
 	_ss	dw ?
 rmcall ENDS
 
-exception_stackframe STRUCT
-	int_retaddx	df ?	; DPMI host's internal addx - NO TOUCHY!
-	_aln1		dw ?	; alignment padding
-	errcode		dd ?
-	act_retaddx	df ?	; The actual return addx
-	_aln2		dw ?	; alignment padding (again)
-	eflags		dd ?
-	ss_esp		df ?
-	_aln3		dw ?	; alignment padding
-exception_stackframe ENDS
+_SOS_START_SAMPLE struc
+lpSamplePtr		df ?
+			dw ? ; padding
+dwSampleSize		dd ?
+wLoopCount		dw ?
+			dw ? ; padding
+wChannel		dw ?
+			dw ? ; padding
+wVolume			dw ?
+			dw ? ; padding
+wSampleID		dw ?
+			dw ? ; padding
+lpCallback		df ?
+			dw ? ; padding
+wSamplePort		dw ?
+			dw ? ; padding
+wSampleFlags		dw ?
+			dw ? ; padding
+dwSampleByteLength	dd ?
+dwSampleLoopPoint	dd ?
+dwSampleLoopLength	dd ?
+dwSamplePitchAdd	dd ?
+wSamplePitchFraction	dw ?
+			dw ? ; padding
+wSamplePanLocation	dw ?
+			dw ? ; padding
+wSamplePanSpeed		dw ?
+			dw ? ; padding
+wSamplePanDirection	dw ?
+			dw ? ; padding
+wSamplePanStart		dw ?
+			dw ? ; padding
+wSamplePanEnd		dw ?
+			dw ? ; padding
+wSampleDelayBytes	dw ?
+			dw ? ; padding
+wSampleDelayRepeat	dw ?
+			dw ? ; padding
+dwSampleADPCMPredicted	dd ?
+wSampleADPCMIndex	dw ?
+			dw ? ; padding
+wSampleRootNoteMIDI	dw ?
+			dw ? ; padding
+			dd ? ; padding
+			dd ? ; padding
+			dd ? ; padding
+_SOS_START_SAMPLE ends
+
+; values for wSampleFlags
+_STEREOTOMONO	equ 10h
+_TRANSLATE8TO16	equ 20h
+_STAGE_LOOP	equ 40h
+_TRANSLATE16TO8	equ 80h
+_VOLUME		equ 100h
+_PANNING	equ 200h
+_PITCH_SHIFT	equ 400h
+_CONTINUE_BLOCK	equ 800h
+_PENDING_RELEASE equ 1000h
+_FIRST_TIME	equ 2000h
+_LOOPING	equ 4000h
+_ACTIVE		equ 8000h
 
 IOCTLRW	struc			; IOCTL read/write request
 	bLen	db ?		; 3 for read, 12 for write
@@ -613,6 +664,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	; mov	gs:[phighest_atrack],(4E8C2h-6664h)	; @ 0x4E8C2 in the data section
 	; mov	gs:[pcd_driveletter],(3FA27h-6664h)	; @ 0x3FA27 in the data section
 	mov	gs:[plang],(3FA35h-6664h)		; @ 0x3FA35 in the data section
+	mov	gs:[pdwDETDriverIndex],(50B78h-6664h)	; @ 0x50B78 in the data section
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x73D6D in this version
@@ -635,6 +687,10 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pPerdu],(0CF8Eh-73D6Dh)		; @ 0xCF8E in the text section
 	mov	gs:[pPlayTrack],(1A710h-73D6Dh)		; @ 0x1A710 in the text section
 	mov	gs:[pCutsceneRead],(2A55Ch-73D6Dh)	; @ 0x2A55C in the text section
+	mov	gs:[pConvenientRetF],(71330h-73D6Dh)	; @ 0x71330 in the text section
+	mov	gs:[psosDIGIStart],(743F7h-73D6Dh)	; @ 0x743F7 in the text section
+	mov	gs:[psosDIGIStop],(74A10h-73D6Dh)	; @ 0x74A10 in the text section
+	mov	gs:[pStartVignette],(26E60h-73D6Dh)	; @ 0x26E60 in the text section
 
 	jmp	@@payload_fixedup
 
@@ -1936,6 +1992,15 @@ payload	segment use32
 @@:
 	mov	[rayman_cs_asds],ax
 
+	; Read in the "MIDI" track data
+	lea	edx,midi_file_name
+	call	read_audio_file
+	jc	@F
+	mov	[midi_file_seg],ax
+	mov	[midi_file_hdl],esi
+	mov	[midi_file_size],ecx
+@@:
+
 	pop	esi
 	pop	edx
 	pop	ecx
@@ -2264,6 +2329,8 @@ setup_hooks	proc near	uses ecx edx
 	call	set_hookpoint
 	mov	edx,[pLevelEnd2]
 	call	set_hookpoint
+	mov	edx,[pStartVignette]
+	call	set_hookpoint
 
 	; Hooks to react to things in the game
 	mov	edx,[pDoGrowingPlat]
@@ -2469,6 +2536,214 @@ free_selectors	proc near	uses ax bx ecx edx esi
 	ret
 free_selectors	endp
 
+; Play an audio track at EAX offset in midi_file_seg, with ECX length
+play_audio_track	proc near	uses es
+	pushad
+	mov	esi,eax
+	mov	edx,ecx
+
+	sub	esp,size _SOS_START_SAMPLE
+	push	ss
+	pop	es
+	assume	es:nothing
+	mov	edi,esp
+
+	mov	ecx,(size _SOS_START_SAMPLE) SHR 2
+	xor	eax,eax
+	rep	stosd
+
+	; Use #3, since Rayman uses #2 (and Designer also uses #1)
+	mov	[esp]._SOS_START_SAMPLE.wSampleID,3
+	; Stereo
+	mov	[esp]._SOS_START_SAMPLE.wChannel,2
+	; Max volume
+	mov	[esp]._SOS_START_SAMPLE.wVolume,7FFFh
+
+	; Point at the data
+	mov	dword ptr [esp]._SOS_START_SAMPLE.lpSamplePtr,esi
+	mov	cx,[midi_file_seg]
+	mov	word ptr [esp+4]._SOS_START_SAMPLE.lpSamplePtr,cx
+	; Set the length
+	mov	[esp]._SOS_START_SAMPLE.dwSampleSize,edx
+
+	; Make it loop
+	mov	[esp]._SOS_START_SAMPLE.wSampleFlags, _STAGE_LOOP+_LOOPING
+	; Loop the full thing, at the end!
+	mov	[esp]._SOS_START_SAMPLE.dwSampleLoopLength,edx
+	mov	[esp]._SOS_START_SAMPLE.dwSampleLoopPoint,edx
+
+	; Call the function
+	mov	ecx,ss		; segment of lpStartSample
+	mov	ebx,esp		; offset of lpStartSample
+	mov	eax,[pdwDETDriverIndex]
+	mov	es,[rayman_ds]
+	mov	eax,es:[eax]	; int drvindex
+	int	1
+
+	call	sosDIGIStartSample
+	mov	[midi_sample_idx],eax
+
+	add	esp,size _SOS_START_SAMPLE
+	popad
+	ret
+play_audio_track	endp
+
+assume	ds:nothing
+
+; Call a "near" function in Rayman (offset in EDI) from within the payload.
+; This code is pretty evil tbh, but we're just using it to interact with the sound system.
+call_code_in_rayman	proc near
+	push	ds
+	push	es
+	; Make sure the segments are sane...
+	mov	ds,[rayman_ds]
+	mov	es,[rayman_ds]
+
+	; Create a RETF frame so the called function will return here
+	push	cs
+	push	offset @F
+	; Create a RETN frame so the near function will return to a RETF trampoline
+	push	[pConvenientRetF]
+	; Create a RETF frame so we can "return" to the desired code in Rayman
+	push	dword ptr [rayman_cs]
+	push	edi
+	; "Return" to Rayman's code
+	retf
+@@:
+	; OK, Rayman's code should have returned to us now - return to our (near) caller
+	pop	es
+	pop	ds
+	ret
+call_code_in_rayman	endp
+
+; int sosDIGIStartSample@<eax>(int drvidx@<eax>, _SOS_START_SAMPLE far *lpStartSample@<cx:ebx>);
+; This is a wrapper function that calls through to the actual sosDIGIStartSample in Rayman's code
+sosDIGIStartSample	proc near
+	mov	edi,[psosDIGIStart]
+	jmp	call_code_in_rayman
+sosDIGIStartSample	endp
+
+; int __fastcall sosDIGIStopSample(int drvidx, int sample);
+; This is a wrapper function that calls through to the actual sosDIGIStopSample in Rayman's code
+sosDIGIStopSample	proc near
+	mov	edi,[psosDIGIStop]
+	jmp	call_code_in_rayman
+sosDIGIStopSample	endp
+
+; Open an audio file (name in DS:EDX), allocate a buffer, read it in,
+; and return:
+; * CF clear on success, set on failure
+; * Selector for audio data in AX
+; * Memory block handle in ESI
+; * Size in ECX
+read_audio_file	proc near	uses edx ebp ds bx di
+	mov	ax,3D00h	; OPEN read-only
+	int	21h
+	jnc	@F
+	ret
+@@:
+	mov	bx,ax
+	mov	ax,4202h	; LSEEK from end
+	xor	cx,cx
+	mov	dx,cx
+	int	21h
+
+	; Now the filesize is in DX:AX --> save in EBP...
+	mov	bp,dx
+	shl	ebp,10h
+	mov	bp,ax
+	; and allocate this much memory
+	xchg	bx,dx		; keep the file handle in DX!
+	mov	cx,ax
+	mov	ax,501h		; allocate Protected Mode memory
+	int	31h
+	xchg	bx,dx		; file handle back into BX
+	jc	@@close_and_ret
+
+	; Now the address is in DX:CX, and the handle in SI:DI
+	shl	esi,10h
+	mov	si,di		; get the full handle value into ESI
+	; Next we need to create a selector to point at this memory
+	mov	di,cx		; save lower half of linear address
+	xor	ax,ax		; alloc selectors
+	mov	cx,1		; just the one
+	int	31h
+	jc	@@free_and_fail
+
+	; Selector is now in AX - need to set its base to DX:DI...
+	mov	cx,dx
+	mov	dx,di
+	mov	di,bx		; save file handle in DI
+	mov	bx,ax		; get selector into BX
+	mov	ax,7		; set base address
+	int	31h
+	jc	@@free_selector_and_fail
+
+	; ... and its size to EBP
+	mov	ax,8		; set limit
+	dec	ebp		; limit = size-1
+	mov	dx,bp
+	ror	ebp,10h
+	mov	cx,bp
+	ror	ebp,10h
+	inc	ebp		; restore the size
+	test	cx,cx
+	jz	@F
+	or	dx,0FFFh	; round up to nearest page!
+@@:	int	31h
+	jc	@@free_selector_and_fail
+
+	; Go back to the beginning of the file...
+	mov	ds,bx		; prepare to read into our new selector
+	mov	ax,4200h	; LSEEK from beginning
+	mov	bx,di		; file handle was saved in DI
+	xor	ecx,ecx
+	mov	edx,ecx
+	int	21h
+
+	; ... and now we can read it into the segment!
+	mov	ah,3Fh		; READ
+	mov	ecx,ebp		; count
+	; EDX is already zero from above (read to beginning of segment)
+	int	21h
+
+	mov	bx,ds		; BX needs to be selector if we fail
+	mov	ds,dx		; zero DS in case we fail
+	jc	@@free_selector_and_fail
+
+	; We're done!
+	xchg	bx,di		; get file handle in BX so we can close it
+
+@@close_and_ret:
+	setc	cl		; remember carry flag!
+	mov	ah,3Eh		; CLOSE
+	int	21h
+	rcr	cl,1		; restore carry
+
+	jc	@F
+	mov	ax,di		; get selector into AX for return
+	mov	ecx,ebp		; get size into ECX for return
+@@:
+	ret
+
+; Free the selector and fail the function call
+@@free_selector_and_fail:
+	mov	ax,1		; free selector
+	int	31h
+	; File handle was saved in DI, get it back into BX
+	mov	bx,di
+; Free the memory and fail the function call
+@@free_and_fail:
+	; Memory handle should be in ESI, get it into SI:DI
+	mov	di,si
+	shr	esi,10h
+	mov	ax,502h		; free Protected Mode memory
+	int	31h
+	; Indicate failure:
+	stc
+	jmp	@@close_and_ret
+read_audio_file	endp
+
 ; We're screwed - print a message (in EDX)
 ; and pull down the entire program
 bailout		proc near
@@ -2514,6 +2789,10 @@ pExitSign2	dd ?
 pPerdu		dd ?	; Rayman is dead, so his death track should play
 pPlayTrack	dd ?	; Function in Rayman's code for playing a numbered CD audio track
 pCutsceneRead	dd 0	; A wrapper function for _dos_read which is broken in v1.21 US
+pConvenientRetF	dd ?	; Finds a convenient RETF, steps outta the shade, says something like...
+psosDIGIStart	dd ?	; Function in Rayman's code to play a sound sample
+psosDIGIStop	dd ?	; Function in Rayman's code to stop a sound sample
+pStartVignette	dd ?	; Game shows "loading" vignette, we start playing the drums!
 end_textptrs:
 
 ; Pointers to data in Rayman
@@ -2530,6 +2809,7 @@ prbook_lentable	dd ?
 ;phighest_atrack	dd ?
 ;pcd_driveletter dd ?	; Pointer to Rayman's CD-ROM drive letter
 plang		dd ?
+pdwDETDriverIndex dd ?	; Pointer to Rayman's SOS driver index
 end_dataptrs:
 
 ; Track on-the-fly music tampering
@@ -2551,6 +2831,13 @@ callback_RMCS	rmcall <?>
 old_intF5	label fword
 old_intF5_off	dd ?
 old_intF5_seg	dw ?
+
+midi_file_seg	dw 0	; Selector pointing at "MIDI" track data
+midi_file_hdl	dd ?	; Memory block handle for that segment
+midi_file_size	dd ?	; Size of that memory block
+midi_sample_idx	dd -1	; Sample index of currently-playing "MIDI" track
+; Filename for "MIDI" track data - TODO: find it in same dir as TSR EXE
+midi_file_name	db "LEVLOAD.BIN",0
 
 ; Error messages
 outofselectors	db 33o,"[35m","Error setting up selector(s).",13,10
@@ -2808,6 +3095,9 @@ hook_handler	proc
 	cmp	eax,[pLevelEnd2]
 	je	@@no_longer_in_level
 
+	cmp	eax,[pStartVignette]
+	je	@@world_loading
+
 	cmp	eax,[pDoGrowingPlat]
 	je	@@plant_growing
 	cmp	eax,[pMoskitoLock]
@@ -2843,6 +3133,18 @@ hook_handler	proc
 
 ; Entering a level - restart the music if it's been tampered with...
 @@now_in_level:
+	mov	ecx,[midi_sample_idx]
+	test	cx,cx
+	js	@F	; skip if negative
+
+	pushad
+	mov	edx,ecx	; int sample
+	mov	eax,[pdwDETDriverIndex]
+	mov	eax,es:[eax]
+	call	sosDIGIStopSample
+	popad
+
+@@:
 	xor	ecx,ecx
 	cmp	[music_dirty],cl
 	jz	@@retpoint
@@ -2880,6 +3182,18 @@ hook_handler	proc
 	mov	eax,[plen_to_restore]
 	mov	es:[eax],ecx		; restore the default track length
 
+	jmp	@@retpoint
+
+; A world is loading, meaning a vignette should be on the screen.
+; Start the corresponding "MIDI" track...
+@@world_loading:
+	xor	eax,eax
+	cmp	[midi_file_seg],ax
+	jz	@@retpoint
+
+	; TODO: Make this generic so we can play different tracks for different occasions
+	mov	ecx,[midi_file_size]
+	call	play_audio_track
 	jmp	@@retpoint
 
 ; Rayman's planted a seed - we should switch the music to Suspense if it's not already.

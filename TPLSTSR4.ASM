@@ -139,7 +139,7 @@ menutrack_start	dd 0
 menutrack_len	dd ?
 menutrack_wrong	dd ?
 
-FIRSTINTROTRACK	equ 52		; first intro track on TPLS CD
+FIRSTINTROTRACK	equ 53		; first intro track on TPLS CD (minus US intro)
 NUMINTROTRACKS	equ 5		; English, French, German, Japanese, Chinese
 FIRSTOUTROTRACK	equ FIRSTINTROTRACK + NUMINTROTRACKS
 
@@ -582,6 +582,8 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	jmp	@@retpoint
 
 @@setup_ptrs_v121us:
+	mov	[is_us_version],1
+
 	; Addresses relative to sSOSDIGIInitDriver in Rayman's data section
 	; It's at 0x6664 in this version
 	mov	gs:[pnum_world],(3F88Ch-6664h)		; @ 0x3F88C in the data section
@@ -871,6 +873,8 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	jmp	@@payload_fixedup
 
 @@setup_ptrs_v112us:
+	mov	[is_us_version],1
+
 	mov	di,offset unprotected + sizeof unprotected - 1
 	mov	cx,-(sizeof unprotected)
 	call	chk_entete
@@ -897,8 +901,8 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[pLogoTrackNo],(1ADD0h-81CA8h)	; @ 0x1ADD0
 	mov	gs:[pMenuTrackNo],(1AE50h-81CA8h)	; @ 0x1AE50
 	mov	gs:[pGOverTrackNo],(1AE78h-81CA8h)	; @ 0x1AE78
-	mov	gs:[pIntroTrackNo],(1651Eh-81CA8h)	; @ 0x1651E
-	mov	gs:[pOuttroTrackNo],(33546h-81CA8h)	; @ 0x33546
+	mov	gs:[pPlayIntro],(1652Bh-81CA8h)		; @ 0x1652B
+	mov	gs:[pPlayOuttro],(33557h-81CA8h)	; @ 0x33557
 	mov	gs:[pDoGrowingPlat],(79180h-81CA8h)	; @ 0x79180
 	mov	gs:[pMoskitoLock],(518A5h-81CA8h)	; @ 0x518A5
 	mov	gs:[pMoskitoFast],(58A04h-81CA8h)	; @ 0x58A04
@@ -938,8 +942,8 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[pLogoTrackNo],(1ACA0h-81216h)	; @ 0x1ACA0
 	mov	gs:[pMenuTrackNo],(1AD20h-81216h)	; @ 0x1AD20
 	mov	gs:[pGOverTrackNo],(1AD48h-81216h)	; @ 0x1AD48
-	mov	gs:[pIntroTrackNo],(163E8h-81216h)	; @ 0x163E8
-	mov	gs:[pOuttroTrackNo],(333E6h-81216h)	; @ 0x333E6
+	mov	gs:[pPlayIntro],(163F5h-81216h)		; @ 0x163F5
+	mov	gs:[pPlayOuttro],(333F7h-81216h)	; @ 0x333F7
 	mov	gs:[pDoGrowingPlat],(786E0h-81216h)	; @ 0x786E0
 	mov	gs:[pMoskitoLock],(51715h-81216h)	; @ 0x51715
 	mov	gs:[pMoskitoFast],(58874h-81216h)	; @ 0x58874
@@ -977,8 +981,8 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[pLogoTrackNo],(1ADD0h-81508h)	; @ 0x1ADD0
 	mov	gs:[pMenuTrackNo],(1AE50h-81508h)	; @ 0x1AE50
 	mov	gs:[pGOverTrackNo],(1AE78h-81508h)	; @ 0x1AE78
-	mov	gs:[pIntroTrackNo],(1651Eh-81508h)	; @ 0x1651E
-	mov	gs:[pOuttroTrackNo],(33546h-81508h)	; @ 0x33546
+	mov	gs:[pPlayIntro],(1652Bh-81508h)		; @ 0x1652B
+	mov	gs:[pPlayOuttro],(33557h-81508h)	; @ 0x33557
 	mov	gs:[pDoGrowingPlat],(789E0h-81508h)	; @ 0x789E0
 	mov	gs:[pMoskitoLock],(51105h-81508h)	; @ 0x51105
 	mov	gs:[pMoskitoFast],(58264h-81508h)	; @ 0x58264
@@ -1018,8 +1022,8 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[pLogoTrackNo],(1AE00h-81678h)	; @ 0x1AE00
 	mov	gs:[pMenuTrackNo],(1AE80h-81678h)	; @ 0x1AE80
 	mov	gs:[pGOverTrackNo],(1AEA8h-81678h)	; @ 0x1AEA8
-	mov	gs:[pIntroTrackNo],(16552h-81678h)	; @ 0x16552
-	mov	gs:[pOuttroTrackNo],(33546h-81678h)	; @ 0x33546
+	mov	gs:[pPlayIntro],(1655Fh-81678h)		; @ 0x1655F
+	mov	gs:[pPlayOuttro],(33557h-81678h)	; @ 0x33557
 	mov	gs:[pDoGrowingPlat],(78B50h-81678h)	; @ 0x78B50
 	mov	gs:[pMoskitoLock],(510B5h-81678h)	; @ 0x510B5
 	mov	gs:[pMoskitoFast],(58214h-81678h)	; @ 0x58214
@@ -1063,8 +1067,8 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	mov	gs:[pLogoTrackNo],(1ABA4h-81548h)	; @ 0x1ABA4
 	mov	gs:[pMenuTrackNo],(1AC24h-81548h)	; @ 0x1AC24
 	mov	gs:[pGOverTrackNo],(1AC4Ch-81548h)	; @ 0x1AC4C
-	mov	gs:[pIntroTrackNo],(16392h-81548h)	; @ 0x16392
-	mov	gs:[pOuttroTrackNo],(33992h-81548h)	; @ 0x33992
+	mov	gs:[pPlayIntro],(1639Fh-81548h)		; @ 0x1639F
+	mov	gs:[pPlayOuttro],(339A3h-81548h)	; @ 0x339A3
 	mov	gs:[pDoGrowingPlat],(78AC0h-81548h)	; @ 0x78AC0
 	mov	gs:[pMoskitoLock],(51105h-81548h)	; @ 0x51105
 	mov	gs:[pMoskitoFast],(58250h-81548h)	; @ 0x58250
@@ -2202,18 +2206,6 @@ setup_tracknos	proc near	uses es eax ebx edx
 	mov	edx,[pGOverTrackNo]
 	call	poketext
 
-	mov	edx,[pIntroTrackNo]
-	test	edx,edx
-	jz	@F
-	mov	al,FIRSTINTROTRACK
-	call	poketext
-
-	mov	edx,[pOuttroTrackNo]
-	test	edx,edx
-	jz	@F
-	mov	al,FIRSTOUTROTRACK
-	call	poketext
-
 @@:
 	ret
 setup_tracknos	endp
@@ -2491,8 +2483,6 @@ pCreditsTrackNo	dd ?
 pLogoTrackNo	dd ?
 pMenuTrackNo	dd ?
 pGOverTrackNo	dd ?
-pIntroTrackNo	dd 0	; For multi-lang versions, intro/outtro track number is a
-pOuttroTrackNo	dd 0	;  fixed offset of the language ID - edit this fixed offset
 pPlayIntro	dd 0	; For single-lang versions, intro/outtro track number is fixed,
 pPlayOuttro	dd 0	;  so we inject our own code to calculate from the lang value
 pDoGrowingPlat	dd ?
@@ -2532,6 +2522,8 @@ ptra_to_restore	dd ?
 len_to_restore	dd ?
 tra_to_restore	db 0
 music_dirty	db 0	; Have we messed with the music and need to restart it?
+
+is_us_version   db 0
 
 align	2
 stub_selector	dw 0
@@ -2964,15 +2956,23 @@ hook_handler	proc
 	mov	[music_dirty],1		; set dirty flag to restart level music when Rayman respawns
 	jmp	@@retpoint
 
-; Single-lang game version is about to play a cutscene - select the right music
+; game is about to play a cutscene - select the right music
 @@cutscene:
 	mov	ecx,[plang]
 	mov	bl,es:[ecx]		; BL contains the track number passed to the cutscene function
 	add	bl,FIRSTINTROTRACK	; first intro track on custom CD image
 
 	cmp	eax,[pPlayOuttro]
+	jne	@@cutscene_adjust_us
+	add	bl,NUMINTROTRACKS	; add five more to get outro track
+	jmp	@@retpoint
+
+@@cutscene_adjust_us:
+	cmp	[is_us_version],1	; check if the game is a US version
 	jne	@@retpoint
-	add	bl,NUMINTROTRACKS	; add five more to get outtro track
+	cmp	byte ptr es:[ecx],0	; check if the language is English
+	jne	@@retpoint
+	sub	bl,1			; subtract 1 from intro track to get US one
 	jmp	@@retpoint
 
 ; Rayman v1.21 US is trying to read from a cutscene file using botched code - do it properly!

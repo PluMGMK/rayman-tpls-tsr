@@ -1,0 +1,11 @@
+cd/*.wav
+cd/*.bin
+FIXWLDS.err
+FIXWLDS.EXE
+TPLSTSR4.bin
+TPLSTSR4.cue
+!cd/TPLSTSR4.cue
+TPLSTSR4.err
+TPLSTSR4.exe
+TPLSTSR4.iso
+

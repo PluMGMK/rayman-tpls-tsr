@@ -174,6 +174,7 @@ hmidrv_buffer	db BUFSIZE dup (?)
 ; Bit 7 = Spoof Copyright / Abstract / Bibliographic Filenames
 ; Bit 8 = Next Audio Disc Info Request should return spoofed data
 ; Bit 9 = Win9x int 31h handler should return immediately after calling RM int 2Fh
+; Bit A = US Rayman version running
 statusword	dw 0
 
 emshdl		dw 0
@@ -505,11 +506,25 @@ chk_music_redirect proc near	uses eax
 	ret
 chk_music_redirect endp
 
-setup_payload	proc near	uses gs ds dx es edi cx ax bx si
+setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	call	get_payload_seg
 	mov	dx,offset emserr
 	jc	@@earlyfail
 	assume	gs:payload
+
+	; clean out the pointers in case there's anything stale from a previous run
+	xor	eax,eax
+	push	gs
+	pop	es
+	assume	es:payload
+
+	mov	edi,offset psosDRVInit_ret + 4
+	mov	cx,(end_textptrs - (psosDRVInit_ret + 4)) SHR 2
+	rep	stosd
+
+	mov	edi,offset psos_InitStruct + 4
+	mov	cx,(end_dataptrs - (psos_InitStruct + 4)) SHR 2
+	rep	stosd
 
 	push	cs
 	pop	es
@@ -582,7 +597,7 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	jmp	@@retpoint
 
 @@setup_ptrs_v121us:
-	mov	[is_us_version],1
+	bts	cs:[statusword],0Ah			; indicate US version
 
 	; Addresses relative to sSOSDIGIInitDriver in Rayman's data section
 	; It's at 0x6664 in this version
@@ -597,6 +612,7 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	; mov	gs:[plowest_atrack],(4E8C1h-6664h)	; @ 0x4E8C1 in the data section
 	; mov	gs:[phighest_atrack],(4E8C2h-6664h)	; @ 0x4E8C2 in the data section
 	; mov	gs:[pcd_driveletter],(3FA27h-6664h)	; @ 0x3FA27 in the data section
+	mov	gs:[plang],(3FA35h-6664h)		; @ 0x3FA35 in the data section
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x73D6D in this version
@@ -873,7 +889,7 @@ setup_payload	proc near	uses gs ds dx es edi cx ax bx si
 	jmp	@@payload_fixedup
 
 @@setup_ptrs_v112us:
-	mov	[is_us_version],1
+	bts	cs:[statusword],0Ah			; indicate US version
 
 	mov	di,offset unprotected + sizeof unprotected - 1
 	mov	cx,-(sizeof unprotected)
@@ -1997,7 +2013,7 @@ fixup_dataptrs	proc near	uses esi
 	; get the delta between the current fixup and anything previously applied
 	; (in case init gets called more than once for any bizarre reason)
 	sub	edi,[psos_InitStruct]
-	mov	esi,offset psos_InitStruct
+	mov	esi,offset psos_InitStruct + 4
 	.while	esi < end_dataptrs
 	   add	[esi],edi
 	   add	esi,4
@@ -2523,8 +2539,6 @@ len_to_restore	dd ?
 tra_to_restore	db 0
 music_dirty	db 0	; Have we messed with the music and need to restart it?
 
-is_us_version   db 0
-
 align	2
 stub_selector	dw 0
 rayman_cs	dw ?	; Rayman's code segment
@@ -2777,6 +2791,10 @@ hook_handler	proc
 	call	get_stub_seg
 	assume	gs:stub
 	bts	gs:[statusword],4
+	; while we're here, check for a US version
+	bt	gs:[statusword],0Ah
+	; CL = 1 if US version, 0 otherwise
+	setc	cl
 	pop	gs
 	assume	gs:nothing
 
@@ -2958,21 +2976,26 @@ hook_handler	proc
 
 ; game is about to play a cutscene - select the right music
 @@cutscene:
+	; CL was set above to indicate whether or not this is a US version -
+	; put this into BH for a moment...
+	mov	bh,cl
+
 	mov	ecx,[plang]
 	mov	bl,es:[ecx]		; BL contains the track number passed to the cutscene function
 	add	bl,FIRSTINTROTRACK	; first intro track on custom CD image
 
 	cmp	eax,[pPlayOuttro]
 	jne	@@cutscene_adjust_us
+	xor	bh,bh			; don't need this value
 	add	bl,NUMINTROTRACKS	; add five more to get outro track
 	jmp	@@retpoint
 
 @@cutscene_adjust_us:
-	cmp	[is_us_version],1	; check if the game is a US version
-	jne	@@retpoint
+	rcr	bh,1			; check if the game is a US version
+	jnc	@@retpoint
 	cmp	byte ptr es:[ecx],0	; check if the language is English
 	jne	@@retpoint
-	sub	bl,1			; subtract 1 from intro track to get US one
+	dec	bl			; subtract 1 from intro track to get US one
 	jmp	@@retpoint
 
 ; Rayman v1.21 US is trying to read from a cutscene file using botched code - do it properly!

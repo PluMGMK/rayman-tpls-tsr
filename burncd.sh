@@ -9,3 +9,4 @@ cdrecord -data TPLSTSR4.ISO -audio $WAVDIR/RaymanPS1_02.wav $WAVDIR/RaymanPS1_03
 echo To get BIN/CUEs for this new CD, you can run:
 echo cdrdao read-cd --datafile tplstsr4.bin --driver generic-mmc:0x20000 --read-raw tplstsr4.toc
 echo toc2cue tplstsr4.toc tplstsr4.cue
+echo or run ./mkbin.sh with the correct WAV files in the CD folder (see TPLSTSR4.CUE)

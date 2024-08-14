@@ -790,6 +790,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[psosDIGIStop],(74A10h-73D6Dh)	; @ 0x74A10 in the text section
 	mov	gs:[pStartVignette],(26E60h-73D6Dh)	; @ 0x26E60 in the text section
 	mov	gs:[pObjectsLoaded],(36054h-73D6Dh)	; @ 0x36054 in the text section
+	mov	gs:[pManageSndEvent],(61C00h-73D6Dh)	; @ 0x61C00 in the text section
 
 	jmp	@@payload_fixedup
 
@@ -2474,6 +2475,8 @@ setup_hooks	proc near	uses ecx edx
 	call	set_hookpoint
 	mov	edx,[pObjectsLoaded]
 	call	set_hookpoint
+	mov	edx,[pManageSndEvent]
+	call	set_hookpoint
 
 @@:
 	ret
@@ -2900,6 +2903,7 @@ psosDIGIStart	dd ?	; Function in Rayman's code to play a sound sample
 psosDIGIStop	dd ?	; Function in Rayman's code to stop a sound sample
 pStartVignette	dd ?	; Game shows "loading" vignette, we start playing the drums!
 pObjectsLoaded	dd ?	; Objects have all been loaded from a LEV file, and fixed up
+pManageSndEvent	dd ?	; Null function associated with "Ambient Starter" collision
 end_textptrs:
 
 ; Pointers to data in Rayman
@@ -3213,6 +3217,8 @@ hook_handler	proc
 	je	@@world_loading
 	cmp	eax,[pObjectsLoaded]
 	je	@@objects_loaded
+	cmp	eax,[pManageSndEvent]
+	je	@@manage_snd_event
 
 	cmp	eax,[pDoGrowingPlat]
 	je	@@plant_growing
@@ -3302,6 +3308,7 @@ hook_handler	proc
 
 ; The world-loading vignette is appearing on the screen.
 ; Start the corresponding "MIDI" track...
+@@manage_snd_event:
 @@world_loading:
 	xor	eax,eax
 	cmp	[midi_file_seg],ax

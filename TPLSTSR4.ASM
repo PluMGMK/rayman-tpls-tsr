@@ -239,9 +239,15 @@ Rayman_ObjData ends
 
 ; values for ObjType
 TYPE_BALLE1	equ 13	; a shot bullet ("always" object which we can replace)
+TYPE_SPLASH	equ 19	; a splash ("always" object which we can replace)
 TYPE_AUDIOSTART	equ 30	; starts a "MIDI" track - we hook it to make it work
+TYPE_CLASH	equ 44	; stoneperson's spark attack ("always" object which we can hopefully replace)
+TYPE_STONECHIP	equ 79	; lava ball piece ("always" object which we can replace)
+TYPE_EXPLOSION	equ 83	; dust effect ("always" object which we can hopefully replace)
 TYPE_POING	equ 94	; Rayman's fist (we use it to find PNG.ETA/DES pointers)
-TYPE_TNT_BOMB	equ 119	; a bomb thrown by a clown ("always" object which we can replace)
+TYPE_BNOTE	equ 102	; teeny bad notes from Mister Sax's bombs ("always" object which we can replace)
+TYPE_BB1_PLAT	equ 115	; a cloud created by Mister Stone's spark attack ("always" object which we can replace)
+TYPE_NOVA2	equ 143	; item collected ("always" object which we can hopefully replace)
 
 ; our own struct:
 InjectableAmbientStarter struc
@@ -2094,7 +2100,7 @@ payload	segment use32
 
 	; Read in the "MIDI" track data
 	lea	edx,midi_file_name
-	call	read_audio_file
+	call	read_ambient_file
 	jc	@F
 	mov	[midi_file_seg],ax
 	mov	[midi_file_hdl],esi
@@ -2644,16 +2650,35 @@ free_selectors	proc near	uses ax bx ecx edx esi
 	ret
 free_selectors	endp
 
-; Play an audio track at EAX offset in midi_file_seg, with ECX length
-play_audio_track	proc near	uses es
+; Play the ALth audio track in the "MIDI" file
+play_ambient_track	proc near	uses es
 	pushad
-	mov	esi,eax
-	mov	edx,ecx
+	; Convert byte track index to dword
+	cbw
+	cwde
+
+	mov	es,[midi_file_seg]
+	assume	es:nothing
+	int	1
+	; Clamp within the tracks available (count is at ES:0)
+	cmp	eax,es:[0]
+	jb	@F
+	mov	eax,es:[0]
+	dec	eax
+@@:
+	; Set ESI to offset and EDX to length
+	mov	esi,es:[eax*8+4]
+	mov	edx,es:[eax*8+8]
+
+	; Already playing this track?
+	cmp	[midi_cur_track],eax
+	je	@F
+	; Remember which track we're playing
+	mov	[midi_cur_track],eax
 
 	sub	esp,size _SOS_START_SAMPLE
 	push	ss
 	pop	es
-	assume	es:nothing
 	mov	edi,esp
 
 	mov	ecx,(size _SOS_START_SAMPLE) SHR 2
@@ -2693,9 +2718,31 @@ play_audio_track	proc near	uses es
 	mov	[midi_sample_idx],eax
 
 	add	esp,size _SOS_START_SAMPLE
+@@:
 	popad
 	ret
-play_audio_track	endp
+play_ambient_track	endp
+
+stop_ambient_track	proc near
+	mov	ecx,[midi_sample_idx]
+	test	cx,cx
+	js	@F	; skip if negative
+
+	pushad
+	mov	edx,ecx	; int sample
+	mov	eax,[pdwDETDriverIndex]
+	mov	eax,es:[eax]
+	call	sosDIGIStopSample
+	popad
+
+@@:
+	xor	ecx,ecx
+	dec	ecx
+	; Set these to -1 to indicate no ambient playing anymore
+	mov	[midi_sample_idx],ecx
+	mov	[midi_cur_track],ecx
+	ret
+stop_ambient_track	endp
 
 assume	ds:nothing
 
@@ -2745,7 +2792,9 @@ sosDIGIStopSample	endp
 ; * Selector for audio data in AX
 ; * Memory block handle in ESI
 ; * Size in ECX
-read_audio_file	proc near	uses edx ebp ds bx di
+read_ambient_file	proc near	uses edx ebp ds bx di
+	int	1
+
 	mov	ax,3D00h	; OPEN read-only
 	int	21h
 	jnc	@F
@@ -2851,7 +2900,7 @@ read_audio_file	proc near	uses edx ebp ds bx di
 	; Indicate failure:
 	stc
 	jmp	@@close_and_ret
-read_audio_file	endp
+read_ambient_file	endp
 
 ; We're screwed - print a message (in EDX)
 ; and pull down the entire program
@@ -2948,14 +2997,94 @@ old_intF5_seg	dw ?
 injection_table:
 	; Pink Plant Woods part 2: we can replace BALLE1 because there are no hunters or standalone bullets in this map
 	InjectableAmbientStarter<1,2,991,375,1,TYPE_BALLE1>
+
+	; Bongo Hills part 4: we can replace BNOTE because (thankfully!) there are loads of them, and Mister Sax isn't in the map
+	InjectableAmbientStarter<2,4,1310,288,3,TYPE_BNOTE>
+	InjectableAmbientStarter<2,4,2663,355,0,TYPE_BNOTE>
+	InjectableAmbientStarter<2,4,236,546,3,TYPE_BNOTE>
+	InjectableAmbientStarter<2,4,2834,686,4,TYPE_BNOTE>
+	InjectableAmbientStarter<2,4,1674,790,0,TYPE_BNOTE>
+	InjectableAmbientStarter<2,4,2736,829,4,TYPE_BNOTE>
+
+	; Twilight Gulch part 1: we can replace BB1_PLAT because Mister Stone isn't in the map
+	InjectableAmbientStarter<3,1,83,15,0,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,1,540,93,5,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,1,1496,114,0,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,1,1915,133,6,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,1,372,316,0,TYPE_BB1_PLAT>
+	; No BB1_PLATs left, so steal one each of these four, and hope there aren't any noticeable consequences...
+	InjectableAmbientStarter<3,1,2121,341,0,TYPE_EXPLOSION>
+	InjectableAmbientStarter<3,1,2056,431,0,TYPE_BALLE1>
+	InjectableAmbientStarter<3,1,2153,504,5,TYPE_NOVA2>
+	InjectableAmbientStarter<3,1,520,581,6,TYPE_STONECHIP>
+
+	; Twilight Gulch part 2: we can replace BB1_PLAT because Mister Stone doesn't throw those in this map
+	InjectableAmbientStarter<3,2,4665,507,0,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,2,1953,621,7,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,2,5593,772,7,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,2,6876,773,0,TYPE_BB1_PLAT>
+
+	; Hard Rocks part 3: we can replace BB1_PLAT because Mister Stone isn't in the map
+	InjectableAmbientStarter<3,5,802,34,0,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,5,0,383,5,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,5,429,383,6,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,5,275,713,0,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,5,135,833,0,TYPE_BB1_PLAT>
+	; No BB1_PLATs left, so steal one each of these five, and hope there aren't any noticeable consequences...
+	InjectableAmbientStarter<3,5,513,1223,5,TYPE_EXPLOSION>
+	InjectableAmbientStarter<3,5,749,2091,0,TYPE_BALLE1>
+	InjectableAmbientStarter<3,5,812,2090,0,TYPE_NOVA2>
+	InjectableAmbientStarter<3,5,874,2090,0,TYPE_STONECHIP>
+	InjectableAmbientStarter<3,5,939,2298,6,TYPE_CLASH>
+
+	; Mister Stone's Peaks part 4: we can replace BB1_PLAT because Mister Stone isn't in the map
+	InjectableAmbientStarter<3,9,3630,146,0,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,9,5073,259,6,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,9,7133,534,0,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,9,2850,809,6,TYPE_BB1_PLAT>
+
+	; Eraser Plains part 1: I think we can replace EXPLOSION because, although there are loads of them, I can't think of anything in this map that actually uses them...
+	InjectableAmbientStarter<4,1,840,14,0,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,1,1640,107,8,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,1,3102,160,8,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,1,830,249,8,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,1,827,319,8,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,1,2382,304,0,TYPE_EXPLOSION>
+
+	; Space Mama's Crater part 2: I think we can replace EXPLOSION because, although there are loads of them, I can't think of anything in this map that actually uses them...
+	InjectableAmbientStarter<4,9,3968,3,8,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,9,2017,117,8,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,9,3251,156,0,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,9,3372,188,0,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,9,3250,232,0,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,9,3371,255,0,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,9,4368,309,0,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,9,4637,382,0,TYPE_EXPLOSION>
+	; No EXPLOSIONs left, so steal a single NOVA2, and hope there aren't any noticeable consequences...
+	InjectableAmbientStarter<4,9,3520,508,8,TYPE_NOVA2>
+
+	; Eat At Joe's part 4: steal two (of five) NOVA2s, and one (of three) SPLASHes (it's unlikely that even two things will hit the water at the same time)
+	InjectableAmbientStarter<5,6,974,121,10,TYPE_SPLASH>
+	InjectableAmbientStarter<5,6,46,468,0,TYPE_NOVA2>
+	InjectableAmbientStarter<5,6,1225,450,10,TYPE_NOVA2>
+
+	; Mister Dark's Dare part 2: we can replace SPLASH because there is no water in the map
+	; Note that there are ten Ambient Starters in this map in the PS1 version, but mercifully, five of them also exist in the PC version!
+	; This means we only need to inject five more:
+	InjectableAmbientStarter<6,2,5064,192,0,TYPE_SPLASH>
+	InjectableAmbientStarter<6,2,5595,288,12,TYPE_SPLASH>
+	InjectableAmbientStarter<6,2,5596,363,12,TYPE_SPLASH>
+	InjectableAmbientStarter<6,2,2045,397,11,TYPE_SPLASH>
+	InjectableAmbientStarter<6,2,5491,397,12,TYPE_SPLASH>
 end_injection_table:
 
 midi_file_seg	dw 0	; Selector pointing at "MIDI" track data
 midi_file_hdl	dd ?	; Memory block handle for that segment
 midi_file_size	dd ?	; Size of that memory block
 midi_sample_idx	dd -1	; Sample index of currently-playing "MIDI" track
+midi_cur_track	dd -1	; Which "MIDI" track is currently playing
 ; Filename for "MIDI" track data - TODO: find it in same dir as TSR EXE
-midi_file_name	db "LEVLOAD.BIN",0
+midi_file_name	db "AMBIENTS.DAT",0
 
 ; Error messages
 outofselectors	db 33o,"[35m","Error setting up selector(s).",13,10
@@ -3255,18 +3384,8 @@ hook_handler	proc
 
 ; Entering a level - restart the music if it's been tampered with...
 @@now_in_level:
-	mov	ecx,[midi_sample_idx]
-	test	cx,cx
-	js	@F	; skip if negative
+	call	stop_ambient_track
 
-	pushad
-	mov	edx,ecx	; int sample
-	mov	eax,[pdwDETDriverIndex]
-	mov	eax,es:[eax]
-	call	sosDIGIStopSample
-	popad
-
-@@:
 	xor	ecx,ecx
 	cmp	[music_dirty],cl
 	jz	@@retpoint
@@ -3308,15 +3427,9 @@ hook_handler	proc
 
 ; The world-loading vignette is appearing on the screen.
 ; Start the corresponding "MIDI" track...
-@@manage_snd_event:
 @@world_loading:
-	xor	eax,eax
-	cmp	[midi_file_seg],ax
-	jz	@@retpoint
-
-	; TODO: Make this generic so we can play different tracks for different occasions
-	mov	ecx,[midi_file_size]
-	call	play_audio_track
+	xor	al,al	; play the first track
+	call	play_ambient_track
 	jmp	@@retpoint
 
 ; A level has finished loading - check if we need to inject one or more Ambient Starters...
@@ -3332,7 +3445,6 @@ hook_handler	proc
 	cmp	word ptr [ecx].InjectableAmbientStarter.bWorld,ax
 	jne	@@next_injection
 
-	int	1
 	push	ecx
 	push	edi
 	push	edx
@@ -3420,6 +3532,21 @@ hook_handler	proc
 	add	ecx,size InjectableAmbientStarter
 	cmp	ecx,offset end_injection_table
 	jb	@@check_injection
+	jmp	@@retpoint
+
+; Rayman's collided with an "Ambient Starter" - use its hitpoints to decide what track to play.
+; Or, if they're zero, then stop any ambient that's playing!
+@@manage_snd_event:
+	; Get the EAX value from the stack (it's the pointer to the Ambient Starter object)
+	mov	eax,[esp+4]
+	; Grab the hitpoints
+	mov	al,[es:eax].Rayman_ObjData.HitPoints
+	test	al,al
+	jz	@F
+	call	play_ambient_track
+	jmp	@@retpoint
+@@:
+	call	stop_ambient_track
 	jmp	@@retpoint
 
 ; Rayman's planted a seed - we should switch the music to Suspense if it's not already.

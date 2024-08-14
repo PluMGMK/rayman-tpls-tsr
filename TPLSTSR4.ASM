@@ -45,68 +45,6 @@ rmcall STRUCT
 	_ss	dw ?
 rmcall ENDS
 
-_SOS_START_SAMPLE struc
-lpSamplePtr		df ?
-			dw ? ; padding
-dwSampleSize		dd ?
-wLoopCount		dw ?
-			dw ? ; padding
-wChannel		dw ?
-			dw ? ; padding
-wVolume			dw ?
-			dw ? ; padding
-wSampleID		dw ?
-			dw ? ; padding
-lpCallback		df ?
-			dw ? ; padding
-wSamplePort		dw ?
-			dw ? ; padding
-wSampleFlags		dw ?
-			dw ? ; padding
-dwSampleByteLength	dd ?
-dwSampleLoopPoint	dd ?
-dwSampleLoopLength	dd ?
-dwSamplePitchAdd	dd ?
-wSamplePitchFraction	dw ?
-			dw ? ; padding
-wSamplePanLocation	dw ?
-			dw ? ; padding
-wSamplePanSpeed		dw ?
-			dw ? ; padding
-wSamplePanDirection	dw ?
-			dw ? ; padding
-wSamplePanStart		dw ?
-			dw ? ; padding
-wSamplePanEnd		dw ?
-			dw ? ; padding
-wSampleDelayBytes	dw ?
-			dw ? ; padding
-wSampleDelayRepeat	dw ?
-			dw ? ; padding
-dwSampleADPCMPredicted	dd ?
-wSampleADPCMIndex	dw ?
-			dw ? ; padding
-wSampleRootNoteMIDI	dw ?
-			dw ? ; padding
-			dd ? ; padding
-			dd ? ; padding
-			dd ? ; padding
-_SOS_START_SAMPLE ends
-
-; values for wSampleFlags
-_STEREOTOMONO	equ 10h
-_TRANSLATE8TO16	equ 20h
-_STAGE_LOOP	equ 40h
-_TRANSLATE16TO8	equ 80h
-_VOLUME		equ 100h
-_PANNING	equ 200h
-_PITCH_SHIFT	equ 400h
-_CONTINUE_BLOCK	equ 800h
-_PENDING_RELEASE equ 1000h
-_FIRST_TIME	equ 2000h
-_LOOPING	equ 4000h
-_ACTIVE		equ 8000h
-
 IOCTLRW	struc			; IOCTL read/write request
 	bLen	db ?		; 3 for read, 12 for write
 	bUnit	db ?
@@ -160,6 +98,165 @@ _SOS_DRV_DRIVERHEADER struc
 	wDeviceID       dd ?
 	wExtenderType   dd ?
 _SOS_DRV_DRIVERHEADER ends
+
+_SOS_START_SAMPLE struc
+	lpSamplePtr		df ?
+				dw ? ; padding
+	dwSampleSize		dd ?
+	wLoopCount		dw ?
+				dw ? ; padding
+	wChannel		dw ?
+				dw ? ; padding
+	wVolume			dw ?
+				dw ? ; padding
+	wSampleID		dw ?
+				dw ? ; padding
+	lpCallback		df ?
+				dw ? ; padding
+	wSamplePort		dw ?
+				dw ? ; padding
+	wSampleFlags		dw ?
+				dw ? ; padding
+	dwSampleByteLength	dd ?
+	dwSampleLoopPoint	dd ?
+	dwSampleLoopLength	dd ?
+	dwSamplePitchAdd	dd ?
+	wSamplePitchFraction	dw ?
+				dw ? ; padding
+	wSamplePanLocation	dw ?
+				dw ? ; padding
+	wSamplePanSpeed		dw ?
+				dw ? ; padding
+	wSamplePanDirection	dw ?
+				dw ? ; padding
+	wSamplePanStart		dw ?
+				dw ? ; padding
+	wSamplePanEnd		dw ?
+				dw ? ; padding
+	wSampleDelayBytes	dw ?
+				dw ? ; padding
+	wSampleDelayRepeat	dw ?
+				dw ? ; padding
+	dwSampleADPCMPredicted	dd ?
+	wSampleADPCMIndex	dw ?
+				dw ? ; padding
+	wSampleRootNoteMIDI	dw ?
+				dw ? ; padding
+				dd ? ; padding
+				dd ? ; padding
+				dd ? ; padding
+_SOS_START_SAMPLE ends
+
+; values for wSampleFlags
+_STEREOTOMONO	equ 10h
+_TRANSLATE8TO16	equ 20h
+_STAGE_LOOP	equ 40h
+_TRANSLATE16TO8	equ 80h
+_VOLUME		equ 100h
+_PANNING	equ 200h
+_PITCH_SHIFT	equ 400h
+_CONTINUE_BLOCK	equ 800h
+_PENDING_RELEASE equ 1000h
+_FIRST_TIME	equ 2000h
+_LOOPING	equ 4000h
+_ACTIVE		equ 8000h
+
+; structures specific to Rayman 1:
+Rayman_LevelInfo struc
+	pObjBase	dd ? ; pointer to an array of game objects
+	wObjCount	dw ? ; how many objects?
+Rayman_LevelInfo ends
+
+; Based on https://github.com/BinarySerializer/BinarySerializer.Ray1/blob/6fb1b1142256877f3d5a74f0742a1a34b4f64b61/src/BinarySerializer.Ray1/DataTypes/Object/ObjData.cs
+Rayman_ObjData struc
+	SpritesPointer		dd ?
+	AnimationsPointer	dd ?
+	ImageBufferPointer	dd ?
+	ETAPointer		dd ?
+	RuntimeCommandsPointer	dd ?
+	RuntimeLabelOffsetsPointer dd ?
+	CommandContexts		dd ?
+				dd ?
+	IsLinked		dd ?
+	IsActive		dd ?
+	XPosition		dd ?
+	YPosition		dd ?
+	ActiveFlag		dd ?
+	Index			dw ?
+	ScreenXPosition		dw ?
+	ScreenYPosition		dw ?
+				dw ?
+	InitialXPosition	dw ?
+	InitialYPosition	dw ?
+	SpeedX			dw ?
+	SpeedY			dw ?
+	SpritesCount		dw ?
+	CurrentCommandOffset	dw ?
+	CommandsCount		dw ?
+				dw ?
+	FollowY			dw ?
+	FollowX			dw ?
+	CMD_Arg1		dw ?
+				dw ?
+	RaymanDistance		dw ?
+	IFramesTimer		dw ?
+	TestBlockIndex		dw ?
+	Scale			dw ?
+	TypeZDC			dw ?
+	ActiveTimer		dw ?
+	ObjType			dw ?
+	BlockTypes		db 5 dup(?)
+				db ? ; padding
+	OffBX			db ?
+	OffBY			db ?
+	RuntimeCurrentAnimIndex	db ?
+	RuntimeCurrentAnimFrame	db ?
+	SubEtat			db ?
+	Etat			db ?
+	InitialSubEtat		db ?
+	InitialEtat		db ?
+	CurrentCommand		db ?
+	GravityValue1		db ?
+	GravityValue2		db ?
+	ChangeAnimationMode	db ?
+	OffHY			db ?
+	FollowSprite		db ?
+	HitPoints		db ?
+	InitialHitPoints	db ?
+	InitFlag		db ?
+	HitSprite		db ?
+	DetectZone		db ?
+	DetectZoneFlag		db ?
+	CommandContextDepth	db ?
+				db ?
+	DisplayPrio		db ?
+	Timer			db ?
+	AnimationsCount		db ?
+	PC_Flags		dw ?
+				db ? ; padding
+Rayman_ObjData ends
+.errnz	size Rayman_ObjData - 84h
+
+; values for ObjType
+TYPE_BALLE1	equ 13	; a shot bullet ("always" object which we can replace)
+TYPE_AUDIOSTART	equ 30	; starts a "MIDI" track - we hook it to make it work
+TYPE_POING	equ 94	; Rayman's fist (we use it to find PNG.ETA/DES pointers)
+TYPE_TNT_BOMB	equ 119	; a bomb thrown by a clown ("always" object which we can replace)
+
+; our own struct:
+InjectableAmbientStarter struc
+	; level where it's injected:
+	bWorld		db ?
+	bLevel		db ?
+	; location to inject it:
+	wXPos		dw ?
+	wYPos		dw ?
+	; hitpoints (i.e. index of track to play)
+	bHitPoints	db ?
+	; which object type we can replace (this can be a byte since
+	; Rayman 1 only uses types >255 for the Breakout game)
+	bTypeToReplace	db ?
+InjectableAmbientStarter ends
 
 debug_bell	macro
 	mov	ah,2	; write character
@@ -665,6 +762,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	; mov	gs:[pcd_driveletter],(3FA27h-6664h)	; @ 0x3FA27 in the data section
 	mov	gs:[plang],(3FA35h-6664h)		; @ 0x3FA35 in the data section
 	mov	gs:[pdwDETDriverIndex],(50B78h-6664h)	; @ 0x50B78 in the data section
+	mov	gs:[plevel],(3CDF0h-6664h)		; @ 0x3CDF0 in the data section
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x73D6D in this version
@@ -691,6 +789,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[psosDIGIStart],(743F7h-73D6Dh)	; @ 0x743F7 in the text section
 	mov	gs:[psosDIGIStop],(74A10h-73D6Dh)	; @ 0x74A10 in the text section
 	mov	gs:[pStartVignette],(26E60h-73D6Dh)	; @ 0x26E60 in the text section
+	mov	gs:[pObjectsLoaded],(36054h-73D6Dh)	; @ 0x36054 in the text section
 
 	jmp	@@payload_fixedup
 
@@ -2329,8 +2428,6 @@ setup_hooks	proc near	uses ecx edx
 	call	set_hookpoint
 	mov	edx,[pLevelEnd2]
 	call	set_hookpoint
-	mov	edx,[pStartVignette]
-	call	set_hookpoint
 
 	; Hooks to react to things in the game
 	mov	edx,[pDoGrowingPlat]
@@ -2368,6 +2465,14 @@ setup_hooks	proc near	uses ecx edx
 	mov	edx,[pCutsceneRead]
 	test	edx,edx
 	jz	@F
+	call	set_hookpoint
+
+@@:	; Hooks to enable "MIDI" tracks (if available)
+	cmp	[midi_file_seg],0
+	jz	@F
+	mov	edx,[pStartVignette]
+	call	set_hookpoint
+	mov	edx,[pObjectsLoaded]
 	call	set_hookpoint
 
 @@:
@@ -2554,7 +2659,7 @@ play_audio_track	proc near	uses es
 
 	; Use #3, since Rayman uses #2 (and Designer also uses #1)
 	mov	[esp]._SOS_START_SAMPLE.wSampleID,3
-	; Stereo
+	; Play the *mono* PCM data across both channels
 	mov	[esp]._SOS_START_SAMPLE.wChannel,2
 	; Max volume
 	mov	[esp]._SOS_START_SAMPLE.wVolume,7FFFh
@@ -2568,9 +2673,11 @@ play_audio_track	proc near	uses es
 
 	; Make it loop
 	mov	[esp]._SOS_START_SAMPLE.wSampleFlags, _STAGE_LOOP+_LOOPING
-	; Loop the full thing, at the end!
+	; Loop the full thing, from the beginning!
 	mov	[esp]._SOS_START_SAMPLE.dwSampleLoopLength,edx
-	mov	[esp]._SOS_START_SAMPLE.dwSampleLoopPoint,edx
+	mov	[esp]._SOS_START_SAMPLE.dwSampleLoopPoint,eax
+	; Loop forever
+	mov	[esp]._SOS_START_SAMPLE.wLoopCount,-1
 
 	; Call the function
 	mov	ecx,ss		; segment of lpStartSample
@@ -2578,7 +2685,6 @@ play_audio_track	proc near	uses es
 	mov	eax,[pdwDETDriverIndex]
 	mov	es,[rayman_ds]
 	mov	eax,es:[eax]	; int drvindex
-	int	1
 
 	call	sosDIGIStartSample
 	mov	[midi_sample_idx],eax
@@ -2793,6 +2899,7 @@ pConvenientRetF	dd ?	; Finds a convenient RETF, steps outta the shade, says some
 psosDIGIStart	dd ?	; Function in Rayman's code to play a sound sample
 psosDIGIStop	dd ?	; Function in Rayman's code to stop a sound sample
 pStartVignette	dd ?	; Game shows "loading" vignette, we start playing the drums!
+pObjectsLoaded	dd ?	; Objects have all been loaded from a LEV file, and fixed up
 end_textptrs:
 
 ; Pointers to data in Rayman
@@ -2810,6 +2917,7 @@ prbook_lentable	dd ?
 ;pcd_driveletter dd ?	; Pointer to Rayman's CD-ROM drive letter
 plang		dd ?
 pdwDETDriverIndex dd ?	; Pointer to Rayman's SOS driver index
+plevel		dd ?	; Pointer to level info
 end_dataptrs:
 
 ; Track on-the-fly music tampering
@@ -2831,6 +2939,12 @@ callback_RMCS	rmcall <?>
 old_intF5	label fword
 old_intF5_off	dd ?
 old_intF5_seg	dw ?
+
+; Ambient Starters to inject
+injection_table:
+	; Pink Plant Woods part 2: we can replace BALLE1 because there are no hunters or standalone bullets in this map
+	InjectableAmbientStarter<1,2,991,375,1,TYPE_BALLE1>
+end_injection_table:
 
 midi_file_seg	dw 0	; Selector pointing at "MIDI" track data
 midi_file_hdl	dd ?	; Memory block handle for that segment
@@ -3097,6 +3211,8 @@ hook_handler	proc
 
 	cmp	eax,[pStartVignette]
 	je	@@world_loading
+	cmp	eax,[pObjectsLoaded]
+	je	@@objects_loaded
 
 	cmp	eax,[pDoGrowingPlat]
 	je	@@plant_growing
@@ -3184,7 +3300,7 @@ hook_handler	proc
 
 	jmp	@@retpoint
 
-; A world is loading, meaning a vignette should be on the screen.
+; The world-loading vignette is appearing on the screen.
 ; Start the corresponding "MIDI" track...
 @@world_loading:
 	xor	eax,eax
@@ -3194,6 +3310,109 @@ hook_handler	proc
 	; TODO: Make this generic so we can play different tracks for different occasions
 	mov	ecx,[midi_file_size]
 	call	play_audio_track
+	jmp	@@retpoint
+
+; A level has finished loading - check if we need to inject one or more Ambient Starters...
+@@objects_loaded:
+	mov	ecx,[pnum_world]
+	mov	al,[es:ecx]
+	mov	ecx,[pnum_level]
+	mov	ah,[es:ecx]
+
+	lea	ecx,injection_table
+@@check_injection:
+	; correct world/level pair?
+	cmp	word ptr [ecx].InjectableAmbientStarter.bWorld,ax
+	jne	@@next_injection
+
+	int	1
+	push	ecx
+	push	edi
+	push	edx
+	push	esi
+	push	bx
+
+	; BL --> hitpoints, BH --> object type to replace
+	mov	bx,word ptr [ecx].InjectableAmbientStarter.bHitPoints
+	; EDX --> X and Y position
+	mov	edx,dword ptr [ecx].InjectableAmbientStarter.wXPos
+
+	; Load the count and base of the object array
+	mov	edi,[plevel]
+	movzx	ecx,[es:edi].Rayman_LevelInfo.wObjCount
+	mov	edi,[es:edi].Rayman_LevelInfo.pObjBase
+
+@@obj_search_loop:
+	; If we find the PNG object, hold onto it so we can copy the first four pointers
+	cmp	[es:edi].Rayman_ObjData.ObjType,TYPE_POING
+	jne	@F
+	mov	esi,edi
+@@:
+	; Check if it's the type we want to replace
+	cmp	byte ptr [es:edi].Rayman_ObjData.ObjType,bh
+	lea	edi,[edi+size Rayman_ObjData]
+	loopne	@@obj_search_loop
+	jecxz	@F
+
+	; Go back to the object we were just looking at
+	sub	edi,size Rayman_ObjData
+	; Turn it into an Ambient Starter
+	mov	[es:edi].Rayman_ObjData.ObjType,TYPE_AUDIOSTART
+	; Values from https://github.com/BinarySerializer/Ray1Map/blob/659ba4e3d078de77324d2025f95115868df08eab/EventManifests/Events.csv#L95
+	mov	[es:edi].Rayman_ObjData.Etat,5
+	mov	[es:edi].Rayman_ObjData.InitialEtat,5
+	mov	[es:edi].Rayman_ObjData.SubEtat,65
+	mov	[es:edi].Rayman_ObjData.InitialSubEtat,65
+	mov	[es:edi].Rayman_ObjData.OffBX,64
+	mov	[es:edi].Rayman_ObjData.OffBY,64
+	mov	[es:edi].Rayman_ObjData.OffHY,64
+	mov	[es:edi].Rayman_ObjData.FollowSprite,0
+	mov	[es:edi].Rayman_ObjData.HitSprite,255
+
+	; For reference here is the hexdump of an Ambient Starter object in CAKE/RAY2.LEV of Rayman v1.21 US:
+	; 00070600                                             04 00  |................|
+	; 00070610  00 00 04 00 00 00 04 00  00 00 02 00 00 00 00 00  |................|
+	; 00070620  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+	; 00070630  00 00 00 00 00 00 8c 0e  00 00 75 00 00 00 00 00  |..........u.....|
+	; 00070640  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+	; 00070650  00 00 5c 00 00 00 00 00  00 00 00 00 00 00 00 00  |..\.............|
+	; 00070660  00 00 00 00 00 00 00 00  00 00 00 00 00 00 1e 00  |................|
+	; 00070670  00 00 00 00 00 00 40 40  00 00 41 05 00 00 00 00  |......@@..A.....|
+	; 00070680  00 00 40 00 0b 00 07 ff  00 00 00 00 00 00 3e 00  |..@...........>.|
+	; 00070690  00 00
+	; This tells us that PC_Flags needs to be zero:
+	mov	[es:edi].Rayman_ObjData.PC_Flags,0
+
+	; Most importantly, set the position to the desired value:
+	movsx	ecx,dx
+	mov	[es:edi].Rayman_ObjData.InitialXPosition,dx
+	mov	[es:edi].Rayman_ObjData.XPosition,ecx
+	sar	edx,10h	; get the Y position from the upper half
+	mov	[es:edi].Rayman_ObjData.InitialYPosition,dx
+	mov	[es:edi].Rayman_ObjData.YPosition,edx
+
+	; And the hitpoints:
+	mov	[es:edi].Rayman_ObjData.HitPoints,bl
+	mov	[es:edi].Rayman_ObjData.InitialHitPoints,bl
+
+	; Now copy the four pointers from the beginning of the PNG object to this one:
+	mov	ecx,4
+	rep	movs dword ptr [es:edi],[es:esi]
+	; Now ECX==0 and ES:EDI points at RuntimeCommandsPointer - nullify that:
+	mov	[es:edi],ecx
+	; Also nullify RuntimeLabelOffsetsPointer:
+	mov	[es:edi+4],ecx
+
+@@:	pop	bx
+	pop	esi
+	pop	edx
+	pop	edi
+	pop	ecx
+
+@@next_injection:
+	add	ecx,size InjectableAmbientStarter
+	cmp	ecx,offset end_injection_table
+	jb	@@check_injection
 	jmp	@@retpoint
 
 ; Rayman's planted a seed - we should switch the music to Suspense if it's not already.

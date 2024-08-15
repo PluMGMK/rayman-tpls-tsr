@@ -2659,7 +2659,6 @@ play_ambient_track	proc near	uses es
 
 	mov	es,[midi_file_seg]
 	assume	es:nothing
-	int	1
 	; Clamp within the tracks available (count is at ES:0)
 	cmp	eax,es:[0]
 	jb	@F
@@ -2793,8 +2792,6 @@ sosDIGIStopSample	endp
 ; * Memory block handle in ESI
 ; * Size in ECX
 read_ambient_file	proc near	uses edx ebp ds bx di
-	int	1
-
 	mov	ax,3D00h	; OPEN read-only
 	int	21h
 	jnc	@F
@@ -2995,7 +2992,7 @@ old_intF5_seg	dw ?
 
 ; Ambient Starters to inject
 injection_table:
-	; Pink Plant Woods part 2: we can replace BALLE1 because there are no hunters or standalone bullets in this map
+	; Pink Plant Woods part 2: we can replace one BALLE1 which leaves four spare for the one hunter in the map...
 	InjectableAmbientStarter<1,2,991,375,1,TYPE_BALLE1>
 
 	; Bongo Hills part 4: we can replace BNOTE because (thankfully!) there are loads of them, and Mister Sax isn't in the map
@@ -3639,6 +3636,11 @@ hook_handler	proc
 	mov	[ebp],eax
 	mov	dword ptr [esp+4],30	; EAX --> Perdu
 	mov	[music_dirty],1		; set dirty flag to restart level music when Rayman respawns
+	; Ensure it doesn't get interrupted
+	mov	eax,[pcdTime]
+	mov	dword ptr es:[eax],-1	; wait forever before restarting music
+	; Also stop any ambient that's playing
+	call	stop_ambient_track
 	jmp	@@retpoint
 
 ; game is about to play a cutscene - select the right music

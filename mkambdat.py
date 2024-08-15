@@ -57,6 +57,8 @@ pcm_data = [
             f="s16le",  # Raw PCM data
             ac=1,       # Mono track
             ar=10000,   # Downsample to 10 kHz
+            # Trim silence:
+            af="silenceremove=start_periods=1:stop_periods=-1:start_threshold=-30dB:stop_threshold=-30dB:start_silence=2:stop_silence=2",
         ).execute()
         for fn in input_files
         ]

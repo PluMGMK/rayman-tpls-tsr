@@ -769,6 +769,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[plang],(3FA35h-6664h)		; @ 0x3FA35 in the data section
 	mov	gs:[pdwDETDriverIndex],(50B78h-6664h)	; @ 0x50B78 in the data section
 	mov	gs:[plevel],(3CDF0h-6664h)		; @ 0x3CDF0 in the data section
+	mov	gs:[pflagCDPlay],(7F78h-6664h)		; @ 0x7F78 in the data section
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x73D6D in this version
@@ -801,6 +802,10 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pStopCD],(0D028h-73D6Dh)		; @ 0xD028 in the text section
 	mov	gs:[pStartFreezeSnd],(63164h-73D6Dh)	; @ 0x63164 in the text section
 	mov	gs:[pStopFreezeSnd],(63178h-73D6Dh)	; @ 0x63178 in the text section
+	mov	gs:[pExitSignEOA1],(5238Fh-73D6Dh)	; @ 0x5238F in the text section
+	mov	gs:[pExitSignEOA2],(523E2h-73D6Dh)	; @ 0x523E2 in the text section
+	mov	gs:[pExitSignEOA3],(524E5h-73D6Dh)	; @ 0x524E5 in the text section
+	mov	gs:[pDoAnimFrozen],(4B6A5h-73D6Dh)	; @ 0x4B6A5 in the text section
 
 	jmp	@@payload_fixedup
 
@@ -2452,14 +2457,21 @@ setup_hooks	proc near	uses ecx edx
 
 	; Hooks to make the PC version use CD audio where it normally doesn't
 	; (but other versions normally do)
-	; Actually, screw the exit-sign one. Not only does the fanfare always get
-	; cut off for an actual exit sign, but it also gets engaged for certain
-	; non-exit-sign events (e.g. beating Mister Sax, using the WINMAP cheat, etc.)
 	mov	edx,[pExitSign1]
 	call	set_hookpoint
 	mov	edx,[pExitSign2]
 	call	set_hookpoint
 	mov	edx,[pPerdu]
+	call	set_hookpoint
+
+	; Hooks to delay level transition until fanfare CD audio has fully played out
+	mov	edx,[pExitSignEOA1]
+	call	set_hookpoint
+	mov	edx,[pExitSignEOA2]
+	call	set_hookpoint
+	mov	edx,[pExitSignEOA3]
+	call	set_hookpoint
+	mov	edx,[pDoAnimFrozen]
 	call	set_hookpoint
 
 	; Hooks to select the language-appropriate cutscene music
@@ -2970,6 +2982,10 @@ pStartCDbbdead	dd ?	; Call to "start_cd_rap" from "PlaySnd", when a boss is defe
 pStopCD		dd ?	; Function in Rayman's code to stop CD audio and reset the timer
 pStartFreezeSnd	dd ?	; Function in Rayman's code to freeze sound when game is paused
 pStopFreezeSnd	dd ?	; Function in Rayman's code to unfreeze sound when game is resumed
+pExitSignEOA1	dd ?	; Exit sign code is checking if Rayman's animation has finished:
+pExitSignEOA2	dd ?	;; We need it to believe the answer is "NO" at least until our CD
+pExitSignEOA3	dd ?	;; audio is finished playing!
+pDoAnimFrozen	dd ?	; Call to "DO_ANIM" on Rayman while game is otherwise frozen on exit sign
 end_textptrs:
 
 ; Pointers to data in Rayman
@@ -2988,6 +3004,7 @@ prbook_lentable	dd ?
 plang		dd ?
 pdwDETDriverIndex dd ?	; Pointer to Rayman's SOS driver index
 plevel		dd ?	; Pointer to level info
+pflagCDPlay	dd ?	; Frame counter from when CD track ends to when it starts again (four frames)
 end_dataptrs:
 
 ; Track on-the-fly music tampering
@@ -3388,6 +3405,15 @@ hook_handler	proc
 	cmp	eax,[pPerdu]
 	je	@@snif_dead
 
+	cmp	eax,[pExitSignEOA1]
+	je	@@eoa_check
+	cmp	eax,[pExitSignEOA2]
+	je	@@eoa_check
+	cmp	eax,[pExitSignEOA3]
+	je	@@eoa_check
+	cmp	eax,[pDoAnimFrozen]
+	je	@@freeze_check
+
 	cmp	eax,[pPlayIntro]
 	je	@@cutscene
 	cmp	eax,[pPlayOuttro]
@@ -3658,33 +3684,52 @@ hook_handler	proc
 	jmp	@@retpoint
 
 ; Rayman's reached the exit sign! Play a CD audio track to celebrate, like the PS1 and Saturn versions.
-; TODO: Do we really want this? It's a nice idea in principle, but the game seems to stop the audio 
-; before it has a chance to finish... We could probably do more hooks to stop that...
 @@yay_fanfare:
-	; We can't return to the same place, because this routine invokes MSCDEX
-	; and hence will restore the hookpoint before we return!
-	; We've interrupted either a far call to a null function (pExitSign2), or
-	; a "MOV EAX,imm32" instruction (pExitSign1). Either way, we can get over it
-	; by skipping exactly five bytes, and we can cover the latter case thus:
-	push	es
-	les	eax,[ebp]
-	mov	eax,es:[eax+1]
-	pop	es
-	mov	[esp+4],eax		; Update EAX value on return
-	add	dword ptr [ebp],5
-
 	; We actually want to call Rayman's function to play a CD audio track,
 	; and invoke it with track 29 (Rayman's victory fanfare).
-	pushad
-	mov	edi,[pPlayTrack]
 	mov	eax,29			; Yeah!
+	call	change_music
 	mov	[music_dirty],80h	; set fanfare flag
-	call	call_code_in_rayman
-	popad
 
 	; Ensure it doesn't get interrupted
-	mov	eax,[pcdTime]
-	mov	dword ptr es:[eax],-1	; wait forever before restarting music
+	mov	eax,[pflagCDPlay]
+	mov	byte ptr es:[eax],0	; reset this so it only becomes non-zero when track ends...
+	jmp	@@retpoint
+
+; The game is frozen as Rayman's on an exit sign, and it's trying to decide whether or not to move to the next level.
+; It has just called "EOA" on Rayman, and AL is non-zero iff Rayman's "yeah" animation has finished playing.
+; We also want to zero AL if the CD audio of the fanfare is still playing!
+@@eoa_check:
+	test	[music_dirty],80h	; check fanfare flag
+	jz	@@retpoint
+
+	mov	eax,[pflagCDPlay]
+	mov	al,es:[eax]
+	test	al,al
+	; If it's non-zero, then that means the music track is finished and the frame counter has started to increment.
+	; That means we can allow the signpost code to continue as if EOA returned TRUE - so swap the return values!
+	xchg	al,[esp+4]
+	; If it wasn't zero, then all we need to do is reset the flags, below.
+	jnz	@@fanfare_done
+
+	; if we're here, it's still playing, so make sure the animation doesn't progress too far
+	test	al,al			; check if EOA returned TRUE
+	jz	@@retpoint
+	; if it did, then set an additional flag so that we freeze Rayman until the CD audio is done:
+	or	[music_dirty],40h
+	jmp	@@retpoint
+
+@@fanfare_done:
+	mov	[music_dirty],0		; unset fanfare flag
+	jmp	@@retpoint		; we're good, leave AL alone
+
+; The game is frozen on an exit sign, but it's asking Rayman's sprite to animate. Check whether or not to allow this.
+@@freeze_check:
+	test	[music_dirty],40h
+	jz	@@retpoint
+	; OK, Rayman's reached the end of his "yeah" animation, so freeze him until the CD audio finishes.
+	; We accomplish this by hopping over the call to "DO_ANIM":
+	add	dword ptr [ebp],5
 	jmp	@@retpoint
 
 ; Rayman is dead :( Play a CD audio track, like the PS1 and Saturn versions

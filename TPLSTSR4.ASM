@@ -799,6 +799,8 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pManageSndEvent],(61C00h-73D6Dh)	; @ 0x61C00 in the text section
 	mov	gs:[pStartCDbbdead],(628DFh-73D6Dh)	; @ 0x628DF in the text section
 	mov	gs:[pStopCD],(0D028h-73D6Dh)		; @ 0xD028 in the text section
+	mov	gs:[pStartFreezeSnd],(63164h-73D6Dh)	; @ 0x63164 in the text section
+	mov	gs:[pStopFreezeSnd],(63178h-73D6Dh)	; @ 0x63178 in the text section
 
 	jmp	@@payload_fixedup
 
@@ -2487,6 +2489,10 @@ setup_hooks	proc near	uses ecx edx
 	call	set_hookpoint
 	mov	edx,[pStartCDbbdead]
 	call	set_hookpoint
+	mov	edx,[pStartFreezeSnd]
+	call	set_hookpoint
+	mov	edx,[pStopFreezeSnd]
+	call	set_hookpoint
 
 @@:
 	ret
@@ -2962,6 +2968,8 @@ pObjectsLoaded	dd ?	; Objects have all been loaded from a LEV file, and fixed up
 pManageSndEvent	dd ?	; Null function associated with "Ambient Starter" collision
 pStartCDbbdead	dd ?	; Call to "start_cd_rap" from "PlaySnd", when a boss is defeated
 pStopCD		dd ?	; Function in Rayman's code to stop CD audio and reset the timer
+pStartFreezeSnd	dd ?	; Function in Rayman's code to freeze sound when game is paused
+pStopFreezeSnd	dd ?	; Function in Rayman's code to unfreeze sound when game is resumed
 end_textptrs:
 
 ; Pointers to data in Rayman
@@ -3359,6 +3367,10 @@ hook_handler	proc
 	je	@@manage_snd_event
 	cmp	eax,[pStartCDbbdead]
 	je	@@start_cd_bbdead
+	cmp	eax,[pStartFreezeSnd]
+	je	@@start_freeze_snd
+	cmp	eax,[pStopFreezeSnd]
+	je	@@stop_freeze_snd
 
 	cmp	eax,[pDoGrowingPlat]
 	je	@@plant_growing
@@ -3579,6 +3591,33 @@ hook_handler	proc
 	popad
 
 	mov	al,2
+	call	play_ambient_track
+	jmp	@@retpoint
+
+; Game is being paused - stop the current ambient track!
+@@start_freeze_snd:
+	mov	eax,[midi_cur_track]
+	test	eax,eax
+	; negative means nothing playing
+	js	@@retpoint
+
+	call	stop_ambient_track
+	; put this back for the moment so that stop_freeze_snd knows what to restart!
+	mov	[midi_cur_track],eax
+	jmp	@@retpoint
+
+; Game is being resumed - restart any ambient track that got stopped!
+; TODO: It would be nice to resume exactly where it left off, but I'm not sure if any
+; mechanism for that exists within SOS, at least the version of it that Rayman uses...
+@@stop_freeze_snd:
+	xor	eax,eax
+	dec	eax
+	; set midi_cur_track to -1 to force play_ambient_track to restart it
+	xchg	eax,[midi_cur_track]
+
+	test	eax,eax
+	; negative means nothing playing
+	js	@@retpoint
 	call	play_ambient_track
 	jmp	@@retpoint
 

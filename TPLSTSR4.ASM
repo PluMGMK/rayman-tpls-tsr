@@ -2663,15 +2663,15 @@ play_ambient_track	proc near	uses es
 
 	mov	es,[midi_file_seg]
 	assume	es:nothing
-	; Clamp within the tracks available (count is at ES:0)
-	cmp	eax,es:[0]
+	; Clamp within the tracks available (count is at ES:4)
+	cmp	eax,es:[4]
 	jb	@F
-	mov	eax,es:[0]
+	mov	eax,es:[4]
 	dec	eax
 @@:
 	; Set ESI to offset and EDX to length
-	mov	esi,es:[eax*8+4]
-	mov	edx,es:[eax*8+8]
+	mov	esi,es:[eax*8+8]
+	mov	edx,es:[eax*8+0Ch]
 
 	; Already playing this track?
 	cmp	[midi_cur_track],eax
@@ -2866,9 +2866,15 @@ read_ambient_file	proc near	uses edx ebp ds bx di
 	; EDX is already zero from above (read to beginning of segment)
 	int	21h
 
+	mov	ecx,ds:[0]	; Get the signature for verification
 	mov	bx,ds		; BX needs to be selector if we fail
 	mov	ds,dx		; zero DS in case we fail
 	jc	@@free_selector_and_fail
+
+	; Check the signature...
+	cmp	ecx,'T' + ('P' SHL 8) + ('L' SHL 10h) + ('S' SHL 18h)
+	; If they are equal, it also keeps CF clear
+	jne	@@free_selector_and_fail
 
 	; We're done!
 	xchg	bx,di		; get file handle in BX so we can close it

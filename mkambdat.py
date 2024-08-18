@@ -26,6 +26,7 @@ input_files = [
         ]
 
 # Output file is AMBIENTS.DAT; The format is (in MASM notation):
+#   magicSig    db "TPLS"
 #   numTracks   dd ?    ; how many tracks in the file
 #   offTrack0   dd ?    ; offset of track 0
 #   lenTrack0   dd ?    ; length of track 0
@@ -39,6 +40,7 @@ input_files = [
 #   ...
 #   pcmTrackN   db Z dup (?)    ; 16-bit little-endian mono PCM data for track N
 output_file = "AMBIENTS.DAT"
+magic_sig = b"TPLS"
 
 input_dir = argv[-1]
 if not os.path.isdir(input_dir):
@@ -74,8 +76,8 @@ lengths = [len(pcm) for pcm in pcm_data]
 
 # Figure out the position of the first track
 total_tracks = len(lengths)
-# Four bytes for the track count, and eight per track for the offset and length
-first_offset = 4 + 8*total_tracks
+# Four bytes for the signature, another four for the track count, and eight per track for the offset and length
+first_offset = len(magic_sig) + 4 + 8*total_tracks
 
 # Now calculate the offsets
 offsets = [first_offset]
@@ -84,6 +86,8 @@ for length in lengths[:-1]: # Leave off the last one since there is nothing afte
 
 # Write the data to the file - all little-endian since this is aimed at x86!
 with open(output_file,"wb") as output:
+    # Write the magic number signature
+    output.write(magic_sig)
     # Write the number of tracks
     output.write(total_tracks.to_bytes(4,'little'))
     # Write the offset and length of each track

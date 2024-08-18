@@ -12,9 +12,9 @@ import os.path
 input_files = [
         "58 - PS1 ~ Level Loading.flac",    # Index 0 only gets played at world load
         "62 - PS1 ~ Jungle Beat 1.flac",
-        "63 - PS1 ~ Jungle Beat 2.flac",    # Unused? :/
+        "61 - PS1 ~ Victory.flac",          # Special case - boss beaten (no Ambient Starter uses this index!)
         "64 - PS1 ~ Bongo Hills.flac",
-        "57 - PS1 ~ Rayman's Theme.flac",
+        "64 - PS1 ~ Bongo Hills.flac",
         "65 - PS1 ~ Mountain Beat 1.flac",
         "66 - PS1 ~ Mountain Beat 2.flac",
         "67 - PS1 ~ Mr Stone's Chase.flac",
@@ -23,7 +23,6 @@ input_files = [
         "71 - PS1 ~ Cave Bongos 2.flac",
         "72 - PS1 ~ Bad Rayman's Chase 1.flac",
         "73 - PS1 ~ Bad Rayman's Chase 2.flac",
-        "61 - PS1 ~ Victory.flac",          # Special case - boss beaten
         ]
 
 # Output file is AMBIENTS.DAT; The format is (in MASM notation):
@@ -57,11 +56,18 @@ pcm_data = [
             f="s16le",  # Raw PCM data
             ac=1,       # Mono track
             ar=10000,   # Downsample to 10 kHz
-            # Trim silence:
-            af="silenceremove=start_periods=1:stop_periods=-1:start_threshold=-30dB:stop_threshold=-30dB:start_silence=2:stop_silence=2",
         ).execute()
         for fn in input_files
         ]
+
+# Remove silence from the end of each file (FFmpeg ostensibly has a filter to do this, but it's complicated and I can't figure it out!)
+for i,pcm in enumerate(pcm_data):
+    silence_starts_at = len(pcm)
+    # Check two bytes at a time since each sample is 16 bits
+    while pcm[silence_starts_at-2] == 0 and pcm[silence_starts_at-1] == 0:
+        silence_starts_at -= 2
+    # Replace the file in the list with one that stops as soon as the silence starts
+    pcm_data[i] = pcm[:silence_starts_at]
 
 # Calculate the lengths
 lengths = [len(pcm) for pcm in pcm_data]

@@ -797,6 +797,8 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pStartVignette],(26E60h-73D6Dh)	; @ 0x26E60 in the text section
 	mov	gs:[pObjectsLoaded],(36054h-73D6Dh)	; @ 0x36054 in the text section
 	mov	gs:[pManageSndEvent],(61C00h-73D6Dh)	; @ 0x61C00 in the text section
+	mov	gs:[pStartCDbbdead],(628DFh-73D6Dh)	; @ 0x628DF in the text section
+	mov	gs:[pStopCD],(0D028h-73D6Dh)		; @ 0xD028 in the text section
 
 	jmp	@@payload_fixedup
 
@@ -2483,6 +2485,8 @@ setup_hooks	proc near	uses ecx edx
 	call	set_hookpoint
 	mov	edx,[pManageSndEvent]
 	call	set_hookpoint
+	mov	edx,[pStartCDbbdead]
+	call	set_hookpoint
 
 @@:
 	ret
@@ -2950,6 +2954,8 @@ psosDIGIStop	dd ?	; Function in Rayman's code to stop a sound sample
 pStartVignette	dd ?	; Game shows "loading" vignette, we start playing the drums!
 pObjectsLoaded	dd ?	; Objects have all been loaded from a LEV file, and fixed up
 pManageSndEvent	dd ?	; Null function associated with "Ambient Starter" collision
+pStartCDbbdead	dd ?	; Call to "start_cd_rap" from "PlaySnd", when a boss is defeated
+pStopCD		dd ?	; Function in Rayman's code to stop CD audio and reset the timer
 end_textptrs:
 
 ; Pointers to data in Rayman
@@ -3345,6 +3351,8 @@ hook_handler	proc
 	je	@@objects_loaded
 	cmp	eax,[pManageSndEvent]
 	je	@@manage_snd_event
+	cmp	eax,[pStartCDbbdead]
+	je	@@start_cd_bbdead
 
 	cmp	eax,[pDoGrowingPlat]
 	je	@@plant_growing
@@ -3544,6 +3552,28 @@ hook_handler	proc
 	jmp	@@retpoint
 @@:
 	call	stop_ambient_track
+	jmp	@@retpoint
+
+; A boss has been defeated, and the game wants to start the menu music.
+; Play the MIDI "Victory" music instead!
+; TODO: Maybe this would sound better as a CD track? It would certainly simplify the code...
+; But as a CD track, the looping wouldn't be as seamless...
+@@start_cd_bbdead:
+	; Skip over the call to start_cd_rap (since we will be calling MSCDEX from inside this handler!)
+	add	dword ptr [ebp],5	; length of 32-bit near call instruction
+
+	pushad
+	; Stop currently-playing CD audio (this calls MSCDEX!)
+	mov	edi,[pStopCD]
+	call	call_code_in_rayman
+
+	; Set cdTime to -1 so the game doesn't try to restart CD audio
+	mov	edi,[pcdTime]
+	mov	dword ptr es:[edi],-1
+	popad
+
+	mov	al,2
+	call	play_ambient_track
 	jmp	@@retpoint
 
 ; Rayman's planted a seed - we should switch the music to Suspense if it's not already.

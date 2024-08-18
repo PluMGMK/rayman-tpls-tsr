@@ -786,7 +786,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pLevelStart2],(77F6h-73D6Dh)	; @ 0x77F6 in the text section
 	mov	gs:[pLevelEnd1],(7697h-73D6Dh)		; @ 0x7697 in the text section
 	mov	gs:[pLevelEnd2],(7CA6h-73D6Dh)		; @ 0x7CA6 in the text section
-	mov	gs:[pExitSign1],(5234Fh-73D6Dh)		; @ 0x5234F in the text section
+	mov	gs:[pExitSign1],(52228h-73D6Dh)		; @ 0x52228 in the text section
 	mov	gs:[pExitSign2],(524ACh-73D6Dh)		; @ 0x524AC in the text section
 	mov	gs:[pPerdu],(0CF8Eh-73D6Dh)		; @ 0xCF8E in the text section
 	mov	gs:[pPlayTrack],(1A710h-73D6Dh)		; @ 0x1A710 in the text section
@@ -2455,10 +2455,10 @@ setup_hooks	proc near	uses ecx edx
 	; Actually, screw the exit-sign one. Not only does the fanfare always get
 	; cut off for an actual exit sign, but it also gets engaged for certain
 	; non-exit-sign events (e.g. beating Mister Sax, using the WINMAP cheat, etc.)
-	; mov	edx,[pExitSign1]
-	; call	set_hookpoint
-	; mov	edx,[pExitSign2]
-	; call	set_hookpoint
+	mov	edx,[pExitSign1]
+	call	set_hookpoint
+	mov	edx,[pExitSign2]
+	call	set_hookpoint
 	mov	edx,[pPerdu]
 	call	set_hookpoint
 
@@ -3661,42 +3661,30 @@ hook_handler	proc
 ; TODO: Do we really want this? It's a nice idea in principle, but the game seems to stop the audio 
 ; before it has a chance to finish... We could probably do more hooks to stop that...
 @@yay_fanfare:
-	; Check whether we're returning to the same or lower privilege level
-	mov	ax,cs
-	mov	cx,[ebp+4]
-	arpl	ax,cx
+	; We can't return to the same place, because this routine invokes MSCDEX
+	; and hence will restore the hookpoint before we return!
+	; We've interrupted either a far call to a null function (pExitSign2), or
+	; a "MOV EAX,imm32" instruction (pExitSign1). Either way, we can get over it
+	; by skipping exactly five bytes, and we can cover the latter case thus:
+	push	es
+	les	eax,[ebp]
+	mov	eax,es:[eax+1]
+	pop	es
+	mov	[esp+4],eax		; Update EAX value on return
+	add	dword ptr [ebp],5
 
-	; Before we diverge our paths, save a new return address in ECX.
-	; These "exit sign" hookpoints occur at a call (5bytes) to a null sub, which can be skipped over.
-	mov	ecx,[ebp]
-	lea	ecx,[ecx+5]
-
-	; We actually want to return directly to Rayman's function to play a CD audio track,
+	; We actually want to call Rayman's function to play a CD audio track,
 	; and invoke it with track 29 (Rayman's victory fanfare).
-	mov	eax,[pPlayTrack]
-	mov	[ebp],eax
+	pushad
+	mov	edi,[pPlayTrack]
 	mov	eax,29			; Yeah!
 	mov	[music_dirty],80h	; set fanfare flag
-	jz	@@fanfare_privileged	; ZF set/cleared by ARPL above
+	call	call_code_in_rayman
+	popad
 
-	; OK, Rayman's at the same privilege level as us, so there's only one stack to worry about
-	mov	[ebp+8],ecx		; replace EFLAGS with new return address - now this is a RETF frame instead of IRET!
-	pop	ecx
-	add	esp,4			; skip EAX on the stack (it's set to our track number!)
-	pop	es
-	pop	ds
-	pop	ebp
-	retf
-
-@@fanfare_privileged:
-	; Returning to an outer privilege level, which means we're on a different stack.
-	sub	dword ptr [ebp+0Ch],4	; create a RETN frame on user-mode stack (user SS:ESP are at SS:EBP+0Ch)
-	lds	ebp,[ebp+0Ch]
-	assume	ds:nothing
-	mov	ds:[ebp],ecx		; put our new return address into this new stack frame
-
-	; Now return by the usual route, but make sure EAX is set to our track number
-	mov	[esp+4],eax
+	; Ensure it doesn't get interrupted
+	mov	eax,[pcdTime]
+	mov	dword ptr es:[eax],-1	; wait forever before restarting music
 	jmp	@@retpoint
 
 ; Rayman is dead :( Play a CD audio track, like the PS1 and Saturn versions

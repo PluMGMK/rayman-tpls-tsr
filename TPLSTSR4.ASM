@@ -1183,12 +1183,15 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[ptimeCd],(135F74h-137634h)		; @ 0x135F74
 	mov	gs:[pcdTime],(16E754h-137634h)		; @ 0x16E754
 	; mov	gs:[prbook_table],(17F7C7h-137634h)	; @ 0x17F7C7
-	mov	gs:[prbook_lentable],(19595Bh-137634h)	; @ 0x19595B
+	mov	gs:[prbook_lentable],(17F95Bh-137634h)	; @ 0x17F95B
 	; mov	gs:[prbook_tablefl],(17FDFEh-137634h)	; @ 0x17FDFE
 	; mov	gs:[plowest_atrack],(17F7C1h-137634h)	; @ 0x17F7C1
 	; mov	gs:[phighest_atrack],(17F7C2h-137634h)	; @ 0x17F7C2
 	; mov	gs:[pcd_driveletter],(17091Bh-137634h)	; @ 0x17091B
 	mov	gs:[plang],(170928h-137634h)		; @ 0x170928
+	mov	gs:[pdwDETDriverIndex],(181A78h-137634h); @ 0x181A78
+	mov	gs:[plevel],(16DCF0h-137634h)		; @ 0x16DCF0
+	mov	gs:[pflagCDPlay],(138FA8h-137634h)	; @ 0x138FA8
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x81CA8 in this version
@@ -1206,10 +1209,24 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pLevelStart2],(156E6h-81CA8h)	; @ 0x156E6
 	mov	gs:[pLevelEnd1],(15587h-81CA8h)		; @ 0x15587
 	mov	gs:[pLevelEnd2],(15B96h-81CA8h)		; @ 0x15B96
-	mov	gs:[pExitSign1],(5FEBFh-81CA8h)		; @ 0x5FEBF
+	mov	gs:[pExitSign1],(5FD98h-81CA8h)		; @ 0x5FD98
 	mov	gs:[pExitSign2],(6001Ch-81CA8h)		; @ 0x6001C
 	mov	gs:[pPerdu],(1ADEEh-81CA8h)		; @ 0x1ADEE
 	mov	gs:[pPlayTrack],(283D8h-81CA8h)		; @ 0x283D8
+	mov	gs:[pConvenientRetF],(7F2B4h-81CA8h)	; @ 0x7F2B4
+	mov	gs:[psosDIGIStart],(82332h-81CA8h)	; @ 0x82332
+	mov	gs:[psosDIGIStop],(8294Bh-81CA8h)	; @ 0x8294B
+	mov	gs:[pStartVignette],(34B3Ch-81CA8h)	; @ 0x34B3C
+	mov	gs:[pObjectsLoaded],(43DA4h-81CA8h)	; @ 0x43DA4
+	mov	gs:[pManageSndEvent],(6FBE0h-81CA8h)	; @ 0x6FBE0
+	mov	gs:[pStartCDbbdead],(708BFh-81CA8h)	; @ 0x708BF
+	mov	gs:[pStopCD],(1AE88h-81CA8h)		; @ 0x1AE88
+	mov	gs:[pStartFreezeSnd],(71144h-81CA8h)	; @ 0x71144
+	mov	gs:[pStopFreezeSnd],(71158h-81CA8h)	; @ 0x71158
+	mov	gs:[pExitSignEOA1],(5FEFFh-81CA8h)	; @ 0x5FEFF
+	mov	gs:[pExitSignEOA2],(5FF52h-81CA8h)	; @ 0x5FF52
+	mov	gs:[pExitSignEOA3],(60055h-81CA8h)	; @ 0x60055
+	mov	gs:[pDoAnimFrozen],(59215h-81CA8h)	; @ 0x59215
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -1230,6 +1247,9 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	; mov	gs:[phighest_atrack],(17F662h-137634h)	; @ 0x17F662
 	; mov	gs:[pcd_driveletter],(1706BBh-137634h)	; @ 0x1706BB
 	mov	gs:[plang],(1706C8h-137634h)		; @ 0x1706C8
+	mov	gs:[pdwDETDriverIndex],(181818h-137634h); @ 0x181818
+	mov	gs:[plevel],(16DA90h-137634h)		; @ 0x16DA90
+	mov	gs:[pflagCDPlay],(138F48h-137634h)	; @ 0x138F48
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x81216 in this version
@@ -1247,10 +1267,24 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pLevelStart2],(156DAh-81216h)	; @ 0x156DA
 	mov	gs:[pLevelEnd1],(1557Bh-81216h)		; @ 0x1557B
 	mov	gs:[pLevelEnd2],(15B7Eh-81216h)		; @ 0x15B7E
-	mov	gs:[pExitSign1],(5FD2Fh-81216h)		; @ 0x5FD2F
+	mov	gs:[pExitSign1],(5FC08h-81216h)		; @ 0x5FC08
 	mov	gs:[pExitSign2],(5FE8Ch-81216h)		; @ 0x5FE8C
 	mov	gs:[pPerdu],(1ACBEh-81216h)		; @ 0x1ACBE
 	mov	gs:[pPlayTrack],(282C4h-81216h)		; @ 0x282C4
+	mov	gs:[pConvenientRetF],(7E7F4h-81216h)	; @ 0x7E7F4
+	mov	gs:[psosDIGIStart],(818A0h-81216h)	; @ 0x818A0
+	mov	gs:[psosDIGIStop],(81EB9h-81216h)	; @ 0x81EB9
+	mov	gs:[pStartVignette],(3491Ch-81216h)	; @ 0x3491C
+	mov	gs:[pObjectsLoaded],(43AC3h-81216h)	; @ 0x43AC3
+	mov	gs:[pManageSndEvent],(6F130h-81216h)	; @ 0x6F130
+	mov	gs:[pStartCDbbdead],(6FE0Fh-81216h)	; @ 0x6FE0F
+	mov	gs:[pStopCD],(1AD58h-81216h)		; @ 0x1AD58
+	mov	gs:[pStartFreezeSnd],(70694h-81216h)	; @ 0x70694
+	mov	gs:[pStopFreezeSnd],(706A8h-81216h)	; @ 0x706A8
+	mov	gs:[pExitSignEOA1],(5FD6Fh-81216h)	; @ 0x5FD6F
+	mov	gs:[pExitSignEOA2],(5FDC2h-81216h)	; @ 0x5FDC2
+	mov	gs:[pExitSignEOA3],(5FEC5h-81216h)	; @ 0x5FEC5
+	mov	gs:[pDoAnimFrozen],(59085h-81216h)	; @ 0x59085
 
 	jmp	@@payload_fixedup
 
@@ -1269,6 +1303,10 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	; mov	gs:[phighest_atrack],(17F7B2h-137624h)	; @ 0x17F7B2
 	; mov	gs:[pcd_driveletter],(17090Bh-137624h)	; @ 0x17090B
 	mov	gs:[plang],(170918h-137624h)		; @ 0x170918
+	; these three are copied from v1.12 US above (same displacements):
+	mov	gs:[pdwDETDriverIndex],(181A78h-137634h); @ 0x181A68
+	mov	gs:[plevel],(16DCF0h-137634h)		; @ 0x16DCE0
+	mov	gs:[pflagCDPlay],(138FA8h-137634h)	; @ 0x138F98
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x81508 in this version
@@ -1286,10 +1324,24 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pLevelStart2],(156E6h-81508h)	; @ 0x156E6
 	mov	gs:[pLevelEnd1],(15587h-81508h)		; @ 0x15587
 	mov	gs:[pLevelEnd2],(15B96h-81508h)		; @ 0x15B96
-	mov	gs:[pExitSign1],(5F71Fh-81508h)		; @ 0x5F71F
+	mov	gs:[pExitSign1],(5F5F8h-81508h)		; @ 0x5F5F8
 	mov	gs:[pExitSign2],(5F87Ch-81508h)		; @ 0x5F87C
 	mov	gs:[pPerdu],(1ADEEh-81508h)		; @ 0x1ADEE
 	mov	gs:[pPlayTrack],(283D8h-81508h)		; @ 0x283D8
+	mov	gs:[pConvenientRetF],(7EB14h-81508h)	; @ 0x7EB14
+	mov	gs:[psosDIGIStart],(81B92h-81508h)	; @ 0x81B92
+	mov	gs:[psosDIGIStop],(821ABh-81508h)	; @ 0x821AB
+	mov	gs:[pStartVignette],(34B3Ch-81508h)	; @ 0x34B3C
+	mov	gs:[pObjectsLoaded],(43B7Ch-81508h)	; @ 0x43B7C
+	mov	gs:[pManageSndEvent],(6F440h-81508h)	; @ 0x6F440
+	mov	gs:[pStartCDbbdead],(7011Fh-81508h)	; @ 0x7011F
+	mov	gs:[pStopCD],(1AE88h-81508h)		; @ 0x1AE88
+	mov	gs:[pStartFreezeSnd],(709A4h-81508h)	; @ 0x709A4
+	mov	gs:[pStopFreezeSnd],(709B8h-81508h)	; @ 0x709B8
+	mov	gs:[pExitSignEOA1],(5F75Fh-81508h)	; @ 0x5F75F
+	mov	gs:[pExitSignEOA2],(5F7B2h-81508h)	; @ 0x5F7B2
+	mov	gs:[pExitSignEOA3],(5F8B5h-81508h)	; @ 0x5F8B5
+	mov	gs:[pDoAnimFrozen],(58A75h-81508h)	; @ 0x58A75
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2

@@ -241,13 +241,13 @@ Rayman_ObjData ends
 TYPE_BALLE1	equ 13	; a shot bullet ("always" object which we can replace)
 TYPE_SPLASH	equ 19	; a splash ("always" object which we can replace)
 TYPE_AUDIOSTART	equ 30	; starts a "MIDI" track - we hook it to make it work
-TYPE_CLASH	equ 44	; stoneperson's spark attack ("always" object which we can hopefully replace)
 TYPE_STONECHIP	equ 79	; lava ball piece ("always" object which we can replace)
 TYPE_EXPLOSION	equ 83	; dust effect ("always" object which we can hopefully replace)
 TYPE_POING	equ 94	; Rayman's fist (we use it to find PNG.ETA/DES pointers)
 TYPE_BNOTE	equ 102	; teeny bad notes from Mister Sax's bombs ("always" object which we can replace)
 TYPE_BB1_PLAT	equ 115	; a cloud created by Mister Stone's spark attack ("always" object which we can replace)
 TYPE_NOVA2	equ 143	; item collected ("always" object which we can hopefully replace)
+TYPE_PIEDS_RAYMAN equ 206 ; Rayman's feet (vestige of handstand move, unused in final game)
 
 ; our own struct:
 InjectableAmbientStarter struc
@@ -824,6 +824,9 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	; mov	gs:[phighest_atrack],(17F8C2h-137664h)	; @ 0x17F8C2
 	; mov	gs:[pcd_driveletter],(170A27h-137664h)	; @ 0x170A27
 	mov	gs:[plang],(170A35h-137664h)		; @ 0x170A35
+	mov	gs:[pdwDETDriverIndex],(181B78h-137664h); @ 0x181B78
+	mov	gs:[plevel],(16DDF0h-137664h)		; @ 0x16DDF0
+	mov	gs:[pflagCDPlay],(138F78h-137664h)	; @ 0x138F78
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x81D8D in this version
@@ -841,10 +844,24 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pLevelStart2],(157F6h-81D8Dh)	; @ 0x157F6
 	mov	gs:[pLevelEnd1],(15697h-81D8Dh)		; @ 0x15697
 	mov	gs:[pLevelEnd2],(15CA6h-81D8Dh)		; @ 0x15CA6
-	mov	gs:[pExitSign1],(6036Fh-81D8Dh)		; @ 0x6036F
+	mov	gs:[pExitSign1],(60248h-81D8Dh)		; @ 0x60248
 	mov	gs:[pExitSign2],(604CCh-81D8Dh)		; @ 0x604CC
 	mov	gs:[pPerdu],(1AF8Eh-81D8Dh)		; @ 0x1AF8E
 	mov	gs:[pPlayTrack],(28710h-81D8Dh)		; @ 0x28710
+	mov	gs:[pConvenientRetF],(7F350h-81D8Dh)	; @ 0x7F350
+	mov	gs:[psosDIGIStart],(82417h-81D8Dh)	; @ 0x82417
+	mov	gs:[psosDIGIStop],(82A30h-81D8Dh)	; @ 0x82A30
+	mov	gs:[pStartVignette],(34E60h-81D8Dh)	; @ 0x34E60
+	mov	gs:[pObjectsLoaded],(44064h-81D8Dh)	; @ 0x44064
+	mov	gs:[pManageSndEvent],(6FC20h-81D8Dh)	; @ 0x6FC20
+	mov	gs:[pStartCDbbdead],(708FFh-81D8Dh)	; @ 0x708FF
+	mov	gs:[pStopCD],(1B028h-81D8Dh)		; @ 0x1B028
+	mov	gs:[pStartFreezeSnd],(71184h-81D8Dh)	; @ 0x71184
+	mov	gs:[pStopFreezeSnd],(71198h-81D8Dh)	; @ 0x71198
+	mov	gs:[pExitSignEOA1],(603AFh-81D8Dh)	; @ 0x603AF
+	mov	gs:[pExitSignEOA2],(60402h-81D8Dh)	; @ 0x60402
+	mov	gs:[pExitSignEOA3],(60505h-81D8Dh)	; @ 0x60505
+	mov	gs:[pDoAnimFrozen],(596C5h-81D8Dh)	; @ 0x596C5
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -3069,7 +3086,7 @@ injection_table:
 	InjectableAmbientStarter<3,5,749,2091,0,TYPE_BALLE1>
 	InjectableAmbientStarter<3,5,812,2090,0,TYPE_NOVA2>
 	InjectableAmbientStarter<3,5,874,2090,0,TYPE_STONECHIP>
-	InjectableAmbientStarter<3,5,939,2298,6,TYPE_CLASH>
+	InjectableAmbientStarter<3,5,939,2298,6,TYPE_PIEDS_RAYMAN>
 
 	; Mister Stone's Peaks part 4: we can replace BB1_PLAT because Mister Stone isn't in the map
 	InjectableAmbientStarter<3,9,3630,146,0,TYPE_BB1_PLAT>
@@ -3094,11 +3111,11 @@ injection_table:
 	InjectableAmbientStarter<4,9,3371,255,0,TYPE_EXPLOSION>
 	InjectableAmbientStarter<4,9,4368,309,0,TYPE_EXPLOSION>
 	InjectableAmbientStarter<4,9,4637,382,0,TYPE_EXPLOSION>
-	; No EXPLOSIONs left, so steal a single NOVA2, and hope there aren't any noticeable consequences...
-	InjectableAmbientStarter<4,9,3520,508,8,TYPE_NOVA2>
+	; No EXPLOSIONs left, so steal the unused "Rayman's feet" object
+	InjectableAmbientStarter<4,9,3520,508,8,TYPE_PIEDS_RAYMAN>
 
-	; Eat At Joe's part 4: steal two (of five) NOVA2s, and one (of three) SPLASHes (it's unlikely that even two things will hit the water at the same time)
-	InjectableAmbientStarter<5,6,974,121,10,TYPE_SPLASH>
+	; Eat At Joe's part 4: steal two (of five) NOVA2s, and the unused "Rayman's feet" object
+	InjectableAmbientStarter<5,6,974,121,10,TYPE_PIEDS_RAYMAN>
 	InjectableAmbientStarter<5,6,46,468,0,TYPE_NOVA2>
 	InjectableAmbientStarter<5,6,1225,450,10,TYPE_NOVA2>
 

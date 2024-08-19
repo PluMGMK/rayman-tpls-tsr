@@ -2306,7 +2306,7 @@ payload	segment use32
 	mov	[rayman_cs_asds],ax
 
 	; Read in the "MIDI" track data
-	lea	edx,midi_file_name
+	lea	edx,midi_file_path
 	call	read_ambient_file
 	jc	@F
 	mov	[midi_file_seg],ax
@@ -3315,8 +3315,8 @@ midi_file_hdl	dd ?	; Memory block handle for that segment
 midi_file_size	dd ?	; Size of that memory block
 midi_sample_idx	dd -1	; Sample index of currently-playing "MIDI" track
 midi_cur_track	dd -1	; Which "MIDI" track is currently playing
-; Filename for "MIDI" track data - TODO: find it in same dir as TSR EXE
-midi_file_name	db "AMBIENTS.DAT",0
+; File path for "MIDI" track data - 80 is the max path length on DOS
+midi_file_path	db 80 dup (?)
 
 ; Error messages
 outofselectors	db 33o,"[35m","Error setting up selector(s).",13,10
@@ -4117,7 +4117,7 @@ openredir_9x	proc near
 openredir_9x	endp
 
 ; Return currently-running EXE in ES:DI
-get_cur_exe	proc near	uses ax bx cx
+get_cur_exe	proc far	uses ax bx cx
 	mov	ah,62h	; GET CURRENT PSP ADDRESS
 	int	21h
 
@@ -4399,7 +4399,7 @@ entry:
 	mov	si,81h	; command line in PSP
 	movzx	cx,byte ptr ds:[80h]
 	test	cx,cx
-	jz	@@freeenv
+	jz	@@getambientdat
 
 	cld
 @@:
@@ -4416,17 +4416,70 @@ entry:
 	or	byte ptr fs:[statusword],ah
 	loop	@B
 
-@@freeenv:
-	; free environment to save Conventional Memory
-	mov	es,ds:[2Ch]	; get env segment
+@@getambientdat:
+	; get_cur_exe will not work on DOS < 3.0
+	int	1
+	mov	ax,3000h; get DOS version
+	int	21h
+	cmp	al,3
+	jae	@F
 
+	mov     es,ds:[2Ch]     ; get env segment
+	mov	di,-1	; indicate to following code that we don't have a path
+	jmp	@@have_exe
+
+@@:	call	get_cur_exe
+@@have_exe:
+	push	es
+	pop	ds	; get env into DS
+	mov	si,di
+	; set up to copy to midi_file_path
+	mov	ax,seg midi_file_path
+	mov	es,ax
+	lea	di,midi_file_path
+
+	; the net effect is that if we're on DOS < 3.0, then we'll end up just
+	; looking for AMBIENTS.DAT in Rayman's folder instead of the TSR's...
+	cmp	si,-1
+	je	@@justcopy
+
+	cld
+@@:	; just copy the EXE path until we reach the null terminator
+	lodsb
+	test	al,al	; null terminator?
+	stosb
+	jnz	@B
+
+	; now scan back to find the last '\' in the path
+	dec	di
+	mov	cx,di
+	lea	ax,midi_file_path
+	sub	cx,ax	; set CX so we don't run backwards off the beginning of the path field!
+	mov	al,'\'
+	std	; scan backwards!
+	repne	scasb
+	; position ourselves *after* the '\'
+	lea	di,[di+2]
+
+@@justcopy:
+	; now copy the actual filename to the end of the path
+	cld	; copy forwards!
+	mov	cx,size_midi_fn
+	lea	si,midi_file_name
+	rep	movs byte ptr es:[di],cs:[si]
+
+	; put the env seg back in ES so we can free it
+	push	ds
+	pop	es
 	push	cs
 	pop	ds
 	assume	ds:init
+
 	mov	dx,offset intro
 	mov	ah,9	; write to stdout
 	int	21h
 
+	; free environment to save Conventional Memory
 	mov	ah,49h	; free memory
 	int	21h
 	jnc	@F
@@ -4600,6 +4653,10 @@ entry:
 	int	21h
 	mov	ax,4CFFh; EXIT with status FFh
 	int	21h
+
+; File name for "MIDI" track data
+midi_file_name	db "AMBIENTS.DAT",0
+size_midi_fn	equ $-midi_file_name
 
 messages:
 no386		db "Looks like you're trying to run this on an 80(2)86. Aborting...",0Dh,0Ah,"$"

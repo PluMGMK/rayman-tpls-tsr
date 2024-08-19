@@ -52,7 +52,7 @@ These are all existing Rayman versions of which I am aware, and the TSR has been
 
 * Make sure your Rayman version is supported (see above table) – if not, please let me know and I'll see what I can do!
 * Download and extract a release from the [releases page](https://github.com/PluMGMK/rayman-tpls-tsr/releases).
-* Use the `tplstsr4.cue` (or `tplstsr4.toc`) and `tplstsr4.bin` files to burn a CD-R – it should be possible to do this with `cdrdao` on Linux, or perhaps [ImgBurn](https://www.imgburn.com/) on Windows.
+* Use the `tplstsr4.cue` (or `tplstsr4.toc`) and `tplstsr4.bin` files to burn a CD-R – it should be possible to do this with `cdrdao` on Linux (**using the `--swap` option!**), or perhaps [ImgBurn](https://www.imgburn.com/) on Windows.
 * Insert the new CD into your PC running DOS or Windows.
 * Before running Rayman, run `D:\TPLSTSR4.EXE` (where `D` is your CD drive letter).
 * Run `C:\RAYMAN.BAT` and enjoy TPLS!

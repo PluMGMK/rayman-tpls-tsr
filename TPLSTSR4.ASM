@@ -249,6 +249,9 @@ TYPE_BB1_PLAT	equ 115	; a cloud created by Mister Stone's spark attack ("always"
 TYPE_NOVA2	equ 143	; item collected ("always" object which we can hopefully replace)
 TYPE_PIEDS_RAYMAN equ 206 ; Rayman's feet (vestige of handstand move, unused in final game)
 
+; the ambient track index we use when a boss has been defeated
+AMBIENT_BBDEAD	equ 2
+
 ; our own struct:
 InjectableAmbientStarter struc
 	; level where it's injected:
@@ -1475,6 +1478,11 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	cs:[spoof_info.addr_leadout],401E19h
 
 @@payload_fixedup:
+	; These two are always at this offset from each other, trust me...
+	mov	eax,gs:[pExitSign1]
+	sub	eax,2Eh
+	mov	gs:[pExitStopAllSnd],eax
+
 	; Next we need to open up Rayman's config file and get the driver ID
 	mov	ax,3D00h	; OPEN read-only
 	mov	dx,offset raycfg
@@ -2703,6 +2711,8 @@ setup_hooks	proc near	uses ecx edx
 	call	set_hookpoint
 	mov	edx,[pStopFreezeSnd]
 	call	set_hookpoint
+	mov	edx,[pExitStopAllSnd]
+	call	set_hookpoint
 
 @@:
 	ret
@@ -3165,6 +3175,7 @@ pLevelStart1	dd ?	; Corresponds to "Now in level" in Dosbox TPLS
 pLevelStart2	dd ?
 pLevelEnd1	dd ?	; Corresponds to "No longer in level" in Dosbox TPLS
 pLevelEnd2	dd ?
+pExitStopAllSnd	dd ?	; Level successfully completed, game calls "stop_all_snd"
 pExitSign1	dd ?	; Rayman reaches an exit sign, so a fanfare should play
 pExitSign2	dd ?
 pPerdu		dd ?	; Rayman is dead, so his death track should play
@@ -3445,7 +3456,7 @@ set_hookpoint	proc near	uses ds eax
 
 	mov	ds,cs:[mydatasel]
 	assume	ds:payload
-	mov	hook_addxs[ecx*4],edx; set the address
+	mov	hook_addxs[ecx*4],edx	; set the address
 
 	call	hook_activate		; activate the new hookpoint!
 	ret
@@ -3623,6 +3634,11 @@ hook_handler	proc
 	je	@@start_freeze_snd
 	cmp	eax,[pStopFreezeSnd]
 	je	@@stop_freeze_snd
+	cmp	eax,[pExitStopAllSnd]
+	je	@@exit_stop_all_snd
+
+	cmp	eax,[psosDIGIStop]
+	je	@@sos_digi_stop_sample_hooked
 
 	cmp	eax,[pDoGrowingPlat]
 	je	@@plant_growing
@@ -3684,6 +3700,14 @@ hook_handler	proc
 @@no_longer_in_level:
 	; EAX is non-zero so this will be a delayed reset
 	call	restore_music
+
+	; Also forget whatever "MIDI" track we're playing, as "stop_all_snd"
+	; has either just been called or will be called soon...
+	xor	ecx,ecx
+	dec	ecx
+	; Set these to -1 to indicate no ambient playing anymore
+	mov	[midi_sample_idx],ecx
+	mov	[midi_cur_track],ecx
 	jmp	@@retpoint
 
 ; The world-loading vignette is appearing on the screen.
@@ -3828,7 +3852,7 @@ hook_handler	proc
 	mov	dword ptr es:[edi],-1
 	popad
 
-	mov	al,2
+	mov	al,AMBIENT_BBDEAD
 	call	play_ambient_track
 	jmp	@@retpoint
 
@@ -3911,6 +3935,41 @@ hook_handler	proc
 	; Ensure it doesn't get interrupted
 	mov	eax,[pflagCDPlay]
 	mov	byte ptr es:[eax],0	; reset this so it only becomes non-zero when track ends...
+	jmp	@@retpoint
+
+; Rayman's successfully completed a level, so the game is about to call "stop_all_snd".
+; Make sure it DOESN'T stop the BBDEAD ambient track, if it's playing!
+; NOTE: Honestly, the implementation below was specifically conceived such that I wouldn't
+;	have to go hunting through the EXEs for even more pointers, because the issue it
+;	addresses was found in the middle of a playthrough, and I didn't have the energy
+;	to start that process again...
+@@exit_stop_all_snd:
+	cmp	[midi_cur_track],AMBIENT_BBDEAD
+	jne	@@retpoint
+
+	; set a *temporary* hookpoint on sosDIGIStopSample
+	push	edx
+	mov	edx,[psosDIGIStop]
+	call	set_hookpoint
+	; set a dummy hookpoint immediately after it so that they reactivate each other
+	add	edx,2
+	call	set_hookpoint
+	pop	edx
+	jmp	@@retpoint
+
+; sosDIGIStopSample has been called by stop_all_snd while the BBDEAD track is playing.
+; Make sure it doesn't stop the BBDEAD track itself!
+@@sos_digi_stop_sample_hooked:
+	cmp	edx,[midi_sample_idx]
+	jne	@@retpoint
+	; OK, it's trying to stop the "MIDI" track - negate the index so it fails!
+	not	edx
+	; Our work is done here, so delete this hookpoint (and the dummy one after it)
+	call	hook_find
+	call	clear_hookpoint
+	add	eax,2
+	call	hook_find
+	call	clear_hookpoint
 	jmp	@@retpoint
 
 ; The game is frozen as Rayman's on an exit sign, and it's trying to decide whether or not to move to the next level.
@@ -4437,7 +4496,6 @@ entry:
 
 @@getambientdat:
 	; get_cur_exe will not work on DOS < 3.0
-	int	1
 	mov	ax,3000h; get DOS version
 	int	21h
 	cmp	al,3

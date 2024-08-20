@@ -3475,6 +3475,12 @@ change_music	proc near
 	push	ecx
 	push	ebx
 
+	; First, restore any music we changed, to avoid picking up the wrong "tra_to_restore"
+	mov	dl,al			; save the track number
+	xor	eax,eax			; "immediate" is OK since we'll be changing again anyway
+	call	restore_music
+	mov	al,dl			; get back the track number
+
 	mov	ecx,[pnum_world]
 	mov	edx,[pnum_level]
 	movzx	ecx,word ptr es:[ecx]
@@ -3521,6 +3527,37 @@ change_music	proc near
 	pop	edx
 	ret
 change_music	endp
+
+; void __fastcall restore_music(bool delayed);
+; Restores the music track (and corresponding length) for the current level if it's been changed
+restore_music	proc near
+	xor	ecx,ecx
+	cmp	[tra_to_restore],cl
+	jnz	@F
+	ret
+@@:
+	; It's been tampered with - reset
+	test	eax,eax
+	jnz	@@delayed_reset
+
+	; Immediately set cdTime to zero to signal the game to play the restored track
+	mov	eax,[pcdTime]
+	mov	es:[eax],ecx
+	jmp	@@reset_decided
+
+@@delayed_reset:
+	mov	[music_dirty],1		; set dirty flag so the restored track will play on level reentry
+
+@@reset_decided:
+	xchg	[tra_to_restore],cl
+	mov	eax,[ptra_to_restore]
+	mov	es:[eax],cl		; restore the default track number
+
+	mov	ecx,[len_to_restore]
+	mov	eax,[plen_to_restore]
+	mov	es:[eax],ecx		; restore the default track length
+	ret
+restore_music	endp
 
 ; =================================================
 ; == HANDLER for our hooking mechanism on int F5 ==
@@ -3594,7 +3631,7 @@ hook_handler	proc
 	cmp	eax,[pMoskitoFast]
 	je	@@moskito_ride_speedup
 	cmp	eax,[pMoskitoSlow]
-	je	@@no_longer_in_level	; restore default music
+	je	@@moskito_ride_slowdown
 
 	cmp	eax,[pExitSign1]
 	je	@@yay_fanfare
@@ -3645,31 +3682,8 @@ hook_handler	proc
 
 ; Leaving a level - restore the default music track if needed, and mark as dirty.
 @@no_longer_in_level:
-	xor	ecx,ecx
-	cmp	[tra_to_restore],cl
-	jz	@@retpoint
-
-	; It's been tampered with - reset
-	cmp	eax,[pMoskitoSlow]
-	jne	@@delayed_reset
-
-	; Immediately set cdTime to zero to signal the game to play the restored track
-	mov	eax,[pcdTime]
-	mov	es:[eax],ecx
-	jmp	@@reset_decided
-
-@@delayed_reset:
-	mov	[music_dirty],1		; set dirty flag so the restored track will play on level reentry
-
-@@reset_decided:
-	xchg	[tra_to_restore],cl
-	mov	eax,[ptra_to_restore]
-	mov	es:[eax],cl		; restore the default track number
-
-	mov	ecx,[len_to_restore]
-	mov	eax,[plen_to_restore]
-	mov	es:[eax],ecx		; restore the default track length
-
+	; EAX is non-zero so this will be a delayed reset
+	call	restore_music
 	jmp	@@retpoint
 
 ; The world-loading vignette is appearing on the screen.
@@ -3881,10 +3895,15 @@ hook_handler	proc
 	call	change_music
 	jmp	@@retpoint
 
+; Rayman's riding a mosquito, who has just slowed down to normal speed - restore the music if necessary.
+@@moskito_ride_slowdown:
+	xor	eax,eax			; immediate reset
+	call	restore_music
+	ret
+
 ; Rayman's reached the exit sign! Play a CD audio track to celebrate, like the PS1 and Saturn versions.
 @@yay_fanfare:
-	; We actually want to call Rayman's function to play a CD audio track,
-	; and invoke it with track 29 (Rayman's victory fanfare).
+	; Change music to track 29 (Rayman's victory fanfare).
 	mov	eax,29			; Yeah!
 	call	change_music
 	mov	[music_dirty],80h	; set fanfare flag

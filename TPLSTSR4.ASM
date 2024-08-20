@@ -3899,7 +3899,7 @@ hook_handler	proc
 @@moskito_ride_slowdown:
 	xor	eax,eax			; immediate reset
 	call	restore_music
-	ret
+	jmp	@@retpoint
 
 ; Rayman's reached the exit sign! Play a CD audio track to celebrate, like the PS1 and Saturn versions.
 @@yay_fanfare:

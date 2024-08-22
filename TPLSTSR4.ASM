@@ -809,6 +809,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA2],(523E2h-73D6Dh)	; @ 0x523E2 in the text section
 	mov	gs:[pExitSignEOA3],(524E5h-73D6Dh)	; @ 0x524E5 in the text section
 	mov	gs:[pDoAnimFrozen],(4B6A5h-73D6Dh)	; @ 0x4B6A5 in the text section
+	mov	gs:[pSuspence],(5ADE8h-73D6Dh)		; @ 0x5ADE8 in the text section
 
 	jmp	@@payload_fixedup
 
@@ -865,6 +866,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA2],(60402h-81D8Dh)	; @ 0x60402
 	mov	gs:[pExitSignEOA3],(60505h-81D8Dh)	; @ 0x60505
 	mov	gs:[pDoAnimFrozen],(596C5h-81D8Dh)	; @ 0x596C5
+	mov	gs:[pSuspence],(68E08h-81D8Dh)		; @ 0x68E08
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -923,6 +925,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA2],(603F2h-8169Dh)	; @ 0x603F2
 	mov	gs:[pExitSignEOA3],(604F5h-8169Dh)	; @ 0x604F5
 	mov	gs:[pDoAnimFrozen],(596B5h-8169Dh)	; @ 0x596B5
+	mov	gs:[pSuspence],(684ACh-8169Dh)		; @ 0x684AC
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -981,6 +984,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA2],(603E2h-821FFh)	; @ 0x603E2
 	mov	gs:[pExitSignEOA3],(604E5h-821FFh)	; @ 0x604E5
 	mov	gs:[pDoAnimFrozen],(596A5h-821FFh)	; @ 0x596A5
+	mov	gs:[pSuspence],(68DE8h-821FFh)		; @ 0x68DE8
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -1039,6 +1043,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA2],(608D2h-81EB9h)	; @ 0x608D2
 	mov	gs:[pExitSignEOA3],(609D5h-81EB9h)	; @ 0x609D5
 	mov	gs:[pDoAnimFrozen],(59B95h-81EB9h)	; @ 0x59B95
+	mov	gs:[pSuspence],(68A5Ch-81EB9h)		; @ 0x68A5C
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -1102,6 +1107,8 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA2],(603E2h-821FFh)	; @ 0x603E2
 	mov	gs:[pExitSignEOA3],(604E5h-821FFh)	; @ 0x604E5
 	mov	gs:[pDoAnimFrozen],(596A5h-821FFh)	; @ 0x596A5
+	; a new one:
+	mov	gs:[pSuspence],(68DE8h-821FFh)		; @ 0x68DE8
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -1165,6 +1172,8 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA2],(603E2h-821FFh)	; @ 0x603F2
 	mov	gs:[pExitSignEOA3],(604E5h-821FFh)	; @ 0x604F5
 	mov	gs:[pDoAnimFrozen],(596A5h-821FFh)	; @ 0x596B5
+	; a new one:
+	mov	gs:[pSuspence],(68DF8h-8220Fh)		; @ 0x68DF8
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -1230,6 +1239,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA2],(5FF52h-81CA8h)	; @ 0x5FF52
 	mov	gs:[pExitSignEOA3],(60055h-81CA8h)	; @ 0x60055
 	mov	gs:[pDoAnimFrozen],(59215h-81CA8h)	; @ 0x59215
+	mov	gs:[pSuspence],(68928h-81CA8h)		; @ 0x68928
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -1288,6 +1298,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA2],(5FDC2h-81216h)	; @ 0x5FDC2
 	mov	gs:[pExitSignEOA3],(5FEC5h-81216h)	; @ 0x5FEC5
 	mov	gs:[pDoAnimFrozen],(59085h-81216h)	; @ 0x59085
+	mov	gs:[pSuspence],(6878Ch-81216h)		; @ 0x6878C
 
 	jmp	@@payload_fixedup
 
@@ -1345,6 +1356,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA2],(5F7B2h-81508h)	; @ 0x5F7B2
 	mov	gs:[pExitSignEOA3],(5F8B5h-81508h)	; @ 0x5F8B5
 	mov	gs:[pDoAnimFrozen],(58A75h-81508h)	; @ 0x58A75
+	mov	gs:[pSuspence],(68188h-81508h)		; @ 0x68188
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -1405,6 +1417,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA2],(5F762h-81678h)	; @ 0x5F762
 	mov	gs:[pExitSignEOA3],(5F865h-81678h)	; @ 0x5F865
 	mov	gs:[pDoAnimFrozen],(58A25h-81678h)	; @ 0x58A25
+	mov	gs:[pSuspence],(68138h-81678h)		; @ 0x68138
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -1469,6 +1482,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA2],(5F622h-81548h)	; @ 0x5F622
 	mov	gs:[pExitSignEOA3],(5F725h-81548h)	; @ 0x5F725
 	mov	gs:[pDoAnimFrozen],(58A61h-81548h)	; @ 0x58A61
+	mov	gs:[pSuspence],(68150h-81548h)		; @ 0x68150
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -2669,6 +2683,8 @@ setup_hooks	proc near	uses ecx edx
 	call	set_hookpoint
 	mov	edx,[pPerdu]
 	call	set_hookpoint
+	mov	edx,[pSuspence]
+	call	set_hookpoint
 
 	; Hooks to delay level transition until fanfare CD audio has fully played out
 	mov	edx,[pExitSignEOA1]
@@ -3198,6 +3214,7 @@ pExitSignEOA1	dd ?	; Exit sign code is checking if Rayman's animation has finish
 pExitSignEOA2	dd ?	;; We need it to believe the answer is "NO" at least until our CD
 pExitSignEOA3	dd ?	;; audio is finished playing!
 pDoAnimFrozen	dd ?	; Call to "DO_ANIM" on Rayman while game is otherwise frozen on exit sign
+pSuspence	dd ?	; Call to null sub from "INIT_VIGNET", which should start Suspense music
 end_textptrs:
 
 ; Pointers to data in Rayman
@@ -3658,6 +3675,8 @@ hook_handler	proc
 	je	@@yay_fanfare
 	cmp	eax,[pPerdu]
 	je	@@snif_dead
+	cmp	eax,[pSuspence]
+	je	@@start_cd_suspence
 
 	cmp	eax,[pExitSignEOA1]
 	je	@@eoa_check
@@ -4026,6 +4045,21 @@ hook_handler	proc
 	; Ensure it doesn't get interrupted
 	mov	eax,[pcdTime]
 	mov	dword ptr es:[eax],-1	; wait forever before restarting music
+	; Also stop any ambient that's playing
+	call	stop_ambient_track
+	jmp	@@retpoint
+
+; "Mister Dark kidnaps Betilla" vignette is being shown - play the "Suspense" music
+@@start_cd_suspence:
+	; skip over the null sub call
+	add	dword ptr [ebp],5
+	; call into Rayman's code to play the suspense track
+	; (this calls MSCDEX so the hookpoint will reset)
+	pushad
+	mov	edi,[pPlayTrack]
+	mov	eax,32	; Suspense
+	call	call_code_in_rayman
+	popad
 	; Also stop any ambient that's playing
 	call	stop_ambient_track
 	jmp	@@retpoint

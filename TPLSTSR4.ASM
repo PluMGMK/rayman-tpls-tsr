@@ -2902,6 +2902,9 @@ play_ambient_track	proc near	uses es
 	; Already playing this track?
 	cmp	[midi_cur_track],eax
 	je	@F
+	; Otherwise, if we're already playing a track, stop it...
+	call	stop_ambient_track	; preserves EAX
+
 	; Remember which track we're playing
 	mov	[midi_cur_track],eax
 

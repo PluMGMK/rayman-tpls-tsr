@@ -3949,6 +3949,12 @@ hook_handler	proc
 
 ; Rayman's reached the exit sign! Play a CD audio track to celebrate, like the PS1 and Saturn versions.
 @@yay_fanfare:
+	; Our fanfare management is scuppered in Candy Chateau, as the game doesn't bother freezing.
+	; So (for now anyway) just don't do it, to avoid potential complications...
+	mov	eax,[pnum_world]
+	cmp	byte ptr es:[eax],6
+	je	@@retpoint
+
 	; Change music to track 29 (Rayman's victory fanfare).
 	mov	eax,29			; Yeah!
 	call	change_music

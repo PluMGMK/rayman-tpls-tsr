@@ -1,11 +1,18 @@
 cd/*.wav
 cd/*.bin
+CD/*.wav
+CD/*.bin
 FIXWLDS.err
 FIXWLDS.EXE
 TPLSTSR4.bin
 TPLSTSR4.cue
 !cd/TPLSTSR4.cue
+!CD/TPLSTSR4.cue
 TPLSTSR4.err
 TPLSTSR4.exe
 TPLSTSR4.iso
+TPLSTSR4.EXE
+TPLSTSR4.ISO
+AMBIENTS.DAT
+ambflacs
 

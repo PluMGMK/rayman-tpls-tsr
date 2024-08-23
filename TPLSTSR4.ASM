@@ -3326,6 +3326,10 @@ injection_table:
 	; No EXPLOSIONs left, so steal the unused "Rayman's feet" object
 	InjectableAmbientStarter<4,9,3520,508,8,TYPE_PIEDS_RAYMAN>
 
+	; Eat At Joe's part 2: steal one (of five) BALLE1s, and the unused "Rayman's feet" object
+	InjectableAmbientStarter<5,4,2926,43,0,TYPE_PIEDS_RAYMAN>
+	InjectableAmbientStarter<5,4,2068,401,10,TYPE_BALLE1>
+
 	; Eat At Joe's part 4: steal two (of five) NOVA2s, and the unused "Rayman's feet" object
 	InjectableAmbientStarter<5,6,974,121,10,TYPE_PIEDS_RAYMAN>
 	InjectableAmbientStarter<5,6,46,468,0,TYPE_NOVA2>

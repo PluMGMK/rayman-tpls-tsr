@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-#mkmididat.py
+#mkambdat.py
 # This file takes in FLACs from RayTunes and creates a DAT file
 # with a header and lots of 10-kHz 16-bit signed mono PCM data!
 
@@ -9,20 +9,21 @@ import os.path
 
 # Here are the files. The indices in this list are important,
 # as they correspond to the hitpoints values for Ambient Starters.
+# They are available in the FLAC archive on https://raytunes.raymanpc.com/
 input_files = [
-        "58 - PS1 ~ Level Loading.flac",    # Index 0 only gets played at world load
-        "62 - PS1 ~ Jungle Beat 1.flac",
-        "61 - PS1 ~ Victory.flac",          # Special case - boss beaten (no Ambient Starter uses this index!)
-        "64 - PS1 ~ Bongo Hills.flac",
-        "64 - PS1 ~ Bongo Hills.flac",
-        "65 - PS1 ~ Mountain Beat 1.flac",
-        "66 - PS1 ~ Mountain Beat 2.flac",
-        "67 - PS1 ~ Mr Stone's Chase.flac",
-        "69 - PS1 ~ Picture City Beat.flac",
-        "70 - PS1 ~ Cave Bongos 1.flac",    # Unused? :/
-        "71 - PS1 ~ Cave Bongos 2.flac",
-        "72 - PS1 ~ Bad Rayman's Chase 1.flac",
-        "73 - PS1 ~ Bad Rayman's Chase 2.flac",
+        "72 - (PS1) Drums of the Enemy.flac",   # Index 0 only gets played at world load
+        "76 - (PS1) Jungle Beat 1.flac",
+        "75 - (PS1) Victory.flac",              # Special case - boss beaten (no Ambient Starter uses this index!)
+        "78 - (PS1) Bongo Hills.flac",
+        "78 - (PS1) Bongo Hills.flac",
+        "79 - (PS1) Mountain Beat 1.flac",
+        "80 - (PS1) Mountain Beat 2.flac",
+        "81 - (PS1) Mr Stone's Chase.flac",
+        "83 - (PS1) Picture City Beat.flac",
+        "84 - (PS1) Cave Bongos 1.flac",        # Unused? :/
+        "85 - (PS1) Cave Bongos 2.flac",
+        "86 - (PS1) Bad Rayman's Chase 1.flac",
+        "87 - (PS1) Bad Rayman's Chase 2.flac",
         ]
 
 # Output file is AMBIENTS.DAT; The format is (in MASM notation):

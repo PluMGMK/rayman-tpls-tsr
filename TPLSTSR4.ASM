@@ -3661,6 +3661,8 @@ hook_handler	proc
 	cmp	eax,[pExitStopAllSnd]
 	je	@@exit_stop_all_snd
 
+	cmp	eax,[psosDIGIStart]
+	je	@@sos_digi_start_sample_hooked
 	cmp	eax,[psosDIGIStop]
 	je	@@sos_digi_stop_sample_hooked
 
@@ -3963,10 +3965,15 @@ hook_handler	proc
 	mov	eax,29			; Yeah!
 	call	change_music
 	mov	[music_dirty],80h	; set fanfare flag
-
 	; Ensure it doesn't get interrupted
 	mov	eax,[pflagCDPlay]
 	mov	byte ptr es:[eax],0	; reset this so it only becomes non-zero when track ends...
+
+	; Set a hookpoint so that we can intercept the next SOS sound start
+	push	edx
+	mov	edx,[psosDIGIStart]
+	call	set_hookpoint
+	pop	edx
 	jmp	@@retpoint
 
 ; Rayman's successfully completed a level, so the game is about to call "stop_all_snd".
@@ -3987,6 +3994,21 @@ hook_handler	proc
 	add	edx,2
 	call	set_hookpoint
 	pop	edx
+	jmp	@@retpoint
+
+; sosDIGIStartSample has been called after starting a fanfare, presumably for Rayman to say "yeah!"
+; Thwart it by nullifying the sample length.
+@@sos_digi_start_sample_hooked:
+	; First, remove this hookpoint as we won't be needing it again.
+	call	hook_find
+	call	clear_hookpoint
+
+	push	gs
+	; The _SOS_START_SAMPLE struct was at CX:EBX, and that CX value is currently at SS:[ESP+4]
+	mov	gs,[esp+4]
+	; Nullify the sample size so that no sound will play
+	mov	gs:[ebx]._SOS_START_SAMPLE.dwSampleSize,0
+	pop	gs
 	jmp	@@retpoint
 
 ; sosDIGIStopSample has been called by stop_all_snd while the BBDEAD track is playing.

@@ -45,17 +45,6 @@ rmcall STRUCT
 	_ss	dw ?
 rmcall ENDS
 
-exception_stackframe STRUCT
-	int_retaddx	df ?	; DPMI host's internal addx - NO TOUCHY!
-	_aln1		dw ?	; alignment padding
-	errcode		dd ?
-	act_retaddx	df ?	; The actual return addx
-	_aln2		dw ?	; alignment padding (again)
-	eflags		dd ?
-	ss_esp		df ?
-	_aln3		dw ?	; alignment padding
-exception_stackframe ENDS
-
 IOCTLRW	struc			; IOCTL read/write request
 	bLen	db ?		; 3 for read, 12 for write
 	bUnit	db ?
@@ -109,6 +98,174 @@ _SOS_DRV_DRIVERHEADER struc
 	wDeviceID       dd ?
 	wExtenderType   dd ?
 _SOS_DRV_DRIVERHEADER ends
+
+_SOS_START_SAMPLE struc
+	lpSamplePtr		df ?
+				dw ? ; padding
+	dwSampleSize		dd ?
+	wLoopCount		dw ?
+				dw ? ; padding
+	wChannel		dw ?
+				dw ? ; padding
+	wVolume			dw ?
+				dw ? ; padding
+	wSampleID		dw ?
+				dw ? ; padding
+	lpCallback		df ?
+				dw ? ; padding
+	wSamplePort		dw ?
+				dw ? ; padding
+	wSampleFlags		dw ?
+				dw ? ; padding
+	dwSampleByteLength	dd ?
+	dwSampleLoopPoint	dd ?
+	dwSampleLoopLength	dd ?
+	dwSamplePitchAdd	dd ?
+	wSamplePitchFraction	dw ?
+				dw ? ; padding
+	wSamplePanLocation	dw ?
+				dw ? ; padding
+	wSamplePanSpeed		dw ?
+				dw ? ; padding
+	wSamplePanDirection	dw ?
+				dw ? ; padding
+	wSamplePanStart		dw ?
+				dw ? ; padding
+	wSamplePanEnd		dw ?
+				dw ? ; padding
+	wSampleDelayBytes	dw ?
+				dw ? ; padding
+	wSampleDelayRepeat	dw ?
+				dw ? ; padding
+	dwSampleADPCMPredicted	dd ?
+	wSampleADPCMIndex	dw ?
+				dw ? ; padding
+	wSampleRootNoteMIDI	dw ?
+				dw ? ; padding
+				dd ? ; padding
+				dd ? ; padding
+				dd ? ; padding
+_SOS_START_SAMPLE ends
+
+; values for wSampleFlags
+_STEREOTOMONO	equ 10h
+_TRANSLATE8TO16	equ 20h
+_STAGE_LOOP	equ 40h
+_TRANSLATE16TO8	equ 80h
+_VOLUME		equ 100h
+_PANNING	equ 200h
+_PITCH_SHIFT	equ 400h
+_CONTINUE_BLOCK	equ 800h
+_PENDING_RELEASE equ 1000h
+_FIRST_TIME	equ 2000h
+_LOOPING	equ 4000h
+_ACTIVE		equ 8000h
+
+; structures specific to Rayman 1:
+Rayman_LevelInfo struc
+	pObjBase	dd ? ; pointer to an array of game objects
+	wObjCount	dw ? ; how many objects?
+Rayman_LevelInfo ends
+
+; Based on https://github.com/BinarySerializer/BinarySerializer.Ray1/blob/6fb1b1142256877f3d5a74f0742a1a34b4f64b61/src/BinarySerializer.Ray1/DataTypes/Object/ObjData.cs
+Rayman_ObjData struc
+	SpritesPointer		dd ?
+	AnimationsPointer	dd ?
+	ImageBufferPointer	dd ?
+	ETAPointer		dd ?
+	RuntimeCommandsPointer	dd ?
+	RuntimeLabelOffsetsPointer dd ?
+	CommandContexts		dd ?
+				dd ?
+	IsLinked		dd ?
+	IsActive		dd ?
+	XPosition		dd ?
+	YPosition		dd ?
+	ActiveFlag		dd ?
+	Index			dw ?
+	ScreenXPosition		dw ?
+	ScreenYPosition		dw ?
+				dw ?
+	InitialXPosition	dw ?
+	InitialYPosition	dw ?
+	SpeedX			dw ?
+	SpeedY			dw ?
+	SpritesCount		dw ?
+	CurrentCommandOffset	dw ?
+	CommandsCount		dw ?
+				dw ?
+	FollowY			dw ?
+	FollowX			dw ?
+	CMD_Arg1		dw ?
+				dw ?
+	RaymanDistance		dw ?
+	IFramesTimer		dw ?
+	TestBlockIndex		dw ?
+	Scale			dw ?
+	TypeZDC			dw ?
+	ActiveTimer		dw ?
+	ObjType			dw ?
+	BlockTypes		db 5 dup(?)
+				db ? ; padding
+	OffBX			db ?
+	OffBY			db ?
+	RuntimeCurrentAnimIndex	db ?
+	RuntimeCurrentAnimFrame	db ?
+	SubEtat			db ?
+	Etat			db ?
+	InitialSubEtat		db ?
+	InitialEtat		db ?
+	CurrentCommand		db ?
+	GravityValue1		db ?
+	GravityValue2		db ?
+	ChangeAnimationMode	db ?
+	OffHY			db ?
+	FollowSprite		db ?
+	HitPoints		db ?
+	InitialHitPoints	db ?
+	InitFlag		db ?
+	HitSprite		db ?
+	DetectZone		db ?
+	DetectZoneFlag		db ?
+	CommandContextDepth	db ?
+				db ?
+	DisplayPrio		db ?
+	Timer			db ?
+	AnimationsCount		db ?
+	PC_Flags		dw ?
+				db ? ; padding
+Rayman_ObjData ends
+.errnz	size Rayman_ObjData - 84h
+
+; values for ObjType
+TYPE_BALLE1	equ 13	; a shot bullet ("always" object which we can replace)
+TYPE_SPLASH	equ 19	; a splash ("always" object which we can replace)
+TYPE_AUDIOSTART	equ 30	; starts a "MIDI" track - we hook it to make it work
+TYPE_STONECHIP	equ 79	; lava ball piece ("always" object which we can replace)
+TYPE_EXPLOSION	equ 83	; dust effect ("always" object which we can hopefully replace)
+TYPE_POING	equ 94	; Rayman's fist (we use it to find PNG.ETA/DES pointers)
+TYPE_BNOTE	equ 102	; teeny bad notes from Mister Sax's bombs ("always" object which we can replace)
+TYPE_BB1_PLAT	equ 115	; a cloud created by Mister Stone's spark attack ("always" object which we can replace)
+TYPE_NOVA2	equ 143	; item collected ("always" object which we can hopefully replace)
+TYPE_PIEDS_RAYMAN equ 206 ; Rayman's feet (vestige of handstand move, unused in final game)
+
+; the ambient track index we use when a boss has been defeated
+AMBIENT_BBDEAD	equ 2
+
+; our own struct:
+InjectableAmbientStarter struc
+	; level where it's injected:
+	bWorld		db ?
+	bLevel		db ?
+	; location to inject it:
+	wXPos		dw ?
+	wYPos		dw ?
+	; hitpoints (i.e. index of track to play)
+	bHitPoints	db ?
+	; which object type we can replace (this can be a byte since
+	; Rayman 1 only uses types >255 for the Breakout game)
+	bTypeToReplace	db ?
+InjectableAmbientStarter ends
 
 debug_bell	macro
 	mov	ah,2	; write character
@@ -613,6 +770,9 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	; mov	gs:[phighest_atrack],(4E8C2h-6664h)	; @ 0x4E8C2 in the data section
 	; mov	gs:[pcd_driveletter],(3FA27h-6664h)	; @ 0x3FA27 in the data section
 	mov	gs:[plang],(3FA35h-6664h)		; @ 0x3FA35 in the data section
+	mov	gs:[pdwDETDriverIndex],(50B78h-6664h)	; @ 0x50B78 in the data section
+	mov	gs:[plevel],(3CDF0h-6664h)		; @ 0x3CDF0 in the data section
+	mov	gs:[pflagCDPlay],(7F78h-6664h)		; @ 0x7F78 in the data section
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x73D6D in this version
@@ -630,11 +790,26 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pLevelStart2],(77F6h-73D6Dh)	; @ 0x77F6 in the text section
 	mov	gs:[pLevelEnd1],(7697h-73D6Dh)		; @ 0x7697 in the text section
 	mov	gs:[pLevelEnd2],(7CA6h-73D6Dh)		; @ 0x7CA6 in the text section
-	mov	gs:[pExitSign1],(5234Fh-73D6Dh)		; @ 0x5234F in the text section
+	mov	gs:[pExitSign1],(52228h-73D6Dh)		; @ 0x52228 in the text section
 	mov	gs:[pExitSign2],(524ACh-73D6Dh)		; @ 0x524AC in the text section
 	mov	gs:[pPerdu],(0CF8Eh-73D6Dh)		; @ 0xCF8E in the text section
 	mov	gs:[pPlayTrack],(1A710h-73D6Dh)		; @ 0x1A710 in the text section
 	mov	gs:[pCutsceneRead],(2A55Ch-73D6Dh)	; @ 0x2A55C in the text section
+	mov	gs:[pConvenientRetF],(71330h-73D6Dh)	; @ 0x71330 in the text section
+	mov	gs:[psosDIGIStart],(743F7h-73D6Dh)	; @ 0x743F7 in the text section
+	mov	gs:[psosDIGIStop],(74A10h-73D6Dh)	; @ 0x74A10 in the text section
+	mov	gs:[pStartVignette],(26E60h-73D6Dh)	; @ 0x26E60 in the text section
+	mov	gs:[pObjectsLoaded],(36054h-73D6Dh)	; @ 0x36054 in the text section
+	mov	gs:[pManageSndEvent],(61C00h-73D6Dh)	; @ 0x61C00 in the text section
+	mov	gs:[pStartCDbbdead],(628DFh-73D6Dh)	; @ 0x628DF in the text section
+	mov	gs:[pStopCD],(0D028h-73D6Dh)		; @ 0xD028 in the text section
+	mov	gs:[pStartFreezeSnd],(63164h-73D6Dh)	; @ 0x63164 in the text section
+	mov	gs:[pStopFreezeSnd],(63178h-73D6Dh)	; @ 0x63178 in the text section
+	mov	gs:[pExitSignEOA1],(5238Fh-73D6Dh)	; @ 0x5238F in the text section
+	mov	gs:[pExitSignEOA2],(523E2h-73D6Dh)	; @ 0x523E2 in the text section
+	mov	gs:[pExitSignEOA3],(524E5h-73D6Dh)	; @ 0x524E5 in the text section
+	mov	gs:[pDoAnimFrozen],(4B6A5h-73D6Dh)	; @ 0x4B6A5 in the text section
+	mov	gs:[pSuspence],(5ADE8h-73D6Dh)		; @ 0x5ADE8 in the text section
 
 	jmp	@@payload_fixedup
 
@@ -653,6 +828,9 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	; mov	gs:[phighest_atrack],(17F8C2h-137664h)	; @ 0x17F8C2
 	; mov	gs:[pcd_driveletter],(170A27h-137664h)	; @ 0x170A27
 	mov	gs:[plang],(170A35h-137664h)		; @ 0x170A35
+	mov	gs:[pdwDETDriverIndex],(181B78h-137664h); @ 0x181B78
+	mov	gs:[plevel],(16DDF0h-137664h)		; @ 0x16DDF0
+	mov	gs:[pflagCDPlay],(138F78h-137664h)	; @ 0x138F78
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x81D8D in this version
@@ -670,10 +848,25 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pLevelStart2],(157F6h-81D8Dh)	; @ 0x157F6
 	mov	gs:[pLevelEnd1],(15697h-81D8Dh)		; @ 0x15697
 	mov	gs:[pLevelEnd2],(15CA6h-81D8Dh)		; @ 0x15CA6
-	mov	gs:[pExitSign1],(6036Fh-81D8Dh)		; @ 0x6036F
+	mov	gs:[pExitSign1],(60248h-81D8Dh)		; @ 0x60248
 	mov	gs:[pExitSign2],(604CCh-81D8Dh)		; @ 0x604CC
 	mov	gs:[pPerdu],(1AF8Eh-81D8Dh)		; @ 0x1AF8E
 	mov	gs:[pPlayTrack],(28710h-81D8Dh)		; @ 0x28710
+	mov	gs:[pConvenientRetF],(7F350h-81D8Dh)	; @ 0x7F350
+	mov	gs:[psosDIGIStart],(82417h-81D8Dh)	; @ 0x82417
+	mov	gs:[psosDIGIStop],(82A30h-81D8Dh)	; @ 0x82A30
+	mov	gs:[pStartVignette],(34E60h-81D8Dh)	; @ 0x34E60
+	mov	gs:[pObjectsLoaded],(44064h-81D8Dh)	; @ 0x44064
+	mov	gs:[pManageSndEvent],(6FC20h-81D8Dh)	; @ 0x6FC20
+	mov	gs:[pStartCDbbdead],(708FFh-81D8Dh)	; @ 0x708FF
+	mov	gs:[pStopCD],(1B028h-81D8Dh)		; @ 0x1B028
+	mov	gs:[pStartFreezeSnd],(71184h-81D8Dh)	; @ 0x71184
+	mov	gs:[pStopFreezeSnd],(71198h-81D8Dh)	; @ 0x71198
+	mov	gs:[pExitSignEOA1],(603AFh-81D8Dh)	; @ 0x603AF
+	mov	gs:[pExitSignEOA2],(60402h-81D8Dh)	; @ 0x60402
+	mov	gs:[pExitSignEOA3],(60505h-81D8Dh)	; @ 0x60505
+	mov	gs:[pDoAnimFrozen],(596C5h-81D8Dh)	; @ 0x596C5
+	mov	gs:[pSuspence],(68E08h-81D8Dh)		; @ 0x68E08
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -694,6 +887,9 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	; mov	gs:[phighest_atrack],(17FAE2h-137694h)	; @ 0x17FAE2
 	; mov	gs:[pcd_driveletter],(170C3Fh-137694h)	; @ 0x170C3F
 	mov	gs:[plang],(170C4Eh-137694h)		; @ 0x170C4E
+	mov	gs:[pdwDETDriverIndex],(181D98h-137694h); @ 0x181D98
+	mov	gs:[plevel],(16DFF0h-137694h)		; @ 0x16DFF0
+	mov	gs:[pflagCDPlay],(138FA8h-137694h)	; @ 0x138FA8
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x8169D in this version
@@ -711,10 +907,25 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pLevelStart2],(157F6h-8169Dh)	; @ 0x157F6
 	mov	gs:[pLevelEnd1],(15697h-8169Dh)		; @ 0x15697
 	mov	gs:[pLevelEnd2],(15CA6h-8169Dh)		; @ 0x15CA6
-	mov	gs:[pExitSign1],(6035Fh-8169Dh)		; @ 0x6035F
+	mov	gs:[pExitSign1],(6023Dh-8169Dh)		; @ 0x6023D
 	mov	gs:[pExitSign2],(604BCh-8169Dh)		; @ 0x604BC
 	mov	gs:[pPerdu],(1AF8Eh-8169Dh)		; @ 0x1AF8E
 	mov	gs:[pPlayTrack],(28710h-8169Dh)		; @ 0x28710
+	mov	gs:[pConvenientRetF],(7EC60h-8169Dh)	; @ 0x7EC60
+	mov	gs:[psosDIGIStart],(81D27h-8169Dh)	; @ 0x81D27
+	mov	gs:[psosDIGIStop],(82340h-8169Dh)	; @ 0x82340
+	mov	gs:[pStartVignette],(34C70h-8169Dh)	; @ 0x34C70
+	mov	gs:[pObjectsLoaded],(43E54h-8169Dh)	; @ 0x43E54
+	mov	gs:[pManageSndEvent],(6F530h-8169Dh)	; @ 0x6F530
+	mov	gs:[pStartCDbbdead],(7020Fh-8169Dh)	; @ 0x7020F
+	mov	gs:[pStopCD],(1B028h-8169Dh)		; @ 0x1B028
+	mov	gs:[pStartFreezeSnd],(70A94h-8169Dh)	; @ 0x70A94
+	mov	gs:[pStopFreezeSnd],(70AA8h-8169Dh)	; @ 0x70AA8
+	mov	gs:[pExitSignEOA1],(6039Fh-8169Dh)	; @ 0x6039F
+	mov	gs:[pExitSignEOA2],(603F2h-8169Dh)	; @ 0x603F2
+	mov	gs:[pExitSignEOA3],(604F5h-8169Dh)	; @ 0x604F5
+	mov	gs:[pDoAnimFrozen],(596B5h-8169Dh)	; @ 0x596B5
+	mov	gs:[pSuspence],(684ACh-8169Dh)		; @ 0x684AC
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -735,6 +946,9 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	; mov	gs:[phighest_atrack],(17F952h-137634h)	; @ 0x17F952
 	; mov	gs:[pcd_driveletter],(170AB7h-137634h)	; @ 0x170AB7
 	mov	gs:[plang],(170AC5h-137634h)		; @ 0x170AC5
+	mov	gs:[pdwDETDriverIndex],(181C08h-137634h); @ 0x181C08
+	mov	gs:[plevel],(16DE80h-137634h)		; @ 0x16DE80
+	mov	gs:[pflagCDPlay],(138FA8h-137634h)	; @ 0x138FA8
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x821FF in this version
@@ -752,10 +966,25 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pLevelStart2],(156F6h-821FFh)	; @ 0x156F6
 	mov	gs:[pLevelEnd1],(15597h-821FFh)		; @ 0x15597
 	mov	gs:[pLevelEnd2],(15BA6h-821FFh)		; @ 0x15BA6
-	mov	gs:[pExitSign1],(6034Fh-821FFh)		; @ 0x6034F
+	mov	gs:[pExitSign1],(60228h-821FFh)		; @ 0x60228
 	mov	gs:[pExitSign2],(604ACh-821FFh)		; @ 0x604AC
 	mov	gs:[pPerdu],(1AF1Eh-821FFh)		; @ 0x1AF1E
 	mov	gs:[pPlayTrack],(28660h-821FFh)		; @ 0x28660
+	mov	gs:[pConvenientRetF],(7F7F0h-821FFh)	; @ 0x7F7F0
+	mov	gs:[psosDIGIStart],(82889h-821FFh)	; @ 0x82889
+	mov	gs:[psosDIGIStop],(82EA2h-821FFh)	; @ 0x82EA2
+	mov	gs:[pStartVignette],(34DECh-821FFh)	; @ 0x34DEC
+	mov	gs:[pObjectsLoaded],(44054h-821FFh)	; @ 0x44054
+	mov	gs:[pManageSndEvent],(700A0h-821FFh)	; @ 0x700A0
+	mov	gs:[pStartCDbbdead],(70D7Fh-821FFh)	; @ 0x70D7F
+	mov	gs:[pStopCD],(1AFB8h-821FFh)		; @ 0x1AFB8
+	mov	gs:[pStartFreezeSnd],(71604h-821FFh)	; @ 0x71604
+	mov	gs:[pStopFreezeSnd],(71618h-821FFh)	; @ 0x71618
+	mov	gs:[pExitSignEOA1],(6038Fh-821FFh)	; @ 0x6038F
+	mov	gs:[pExitSignEOA2],(603E2h-821FFh)	; @ 0x603E2
+	mov	gs:[pExitSignEOA3],(604E5h-821FFh)	; @ 0x604E5
+	mov	gs:[pDoAnimFrozen],(596A5h-821FFh)	; @ 0x596A5
+	mov	gs:[pSuspence],(68DE8h-821FFh)		; @ 0x68DE8
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -776,6 +1005,9 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	; mov	gs:[phighest_atrack],(17F952h-137634h)	; @ 0x17F952
 	; mov	gs:[pcd_driveletter],(170AB7h-137634h)	; @ 0x170AB7
 	mov	gs:[plang],(170AC5h-137634h)		; @ 0x170AC5
+	mov	gs:[pdwDETDriverIndex],(181C08h-137634h); @ 0x181C08
+	mov	gs:[plevel],(16DE80h-137634h)		; @ 0x16DE80
+	mov	gs:[pflagCDPlay],(138FA8h-137634h)	; @ 0x138FA8
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x81EB9 in this version
@@ -793,10 +1025,25 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pLevelStart2],(156E6h-81EB9h)	; @ 0x156E6
 	mov	gs:[pLevelEnd1],(15587h-81EB9h)		; @ 0x15587
 	mov	gs:[pLevelEnd2],(15B96h-81EB9h)		; @ 0x15B96
-	mov	gs:[pExitSign1],(6083Fh-81EB9h)		; @ 0x6083F
+	mov	gs:[pExitSign1],(60718h-81EB9h)		; @ 0x60718
 	mov	gs:[pExitSign2],(6099Ch-81EB9h)		; @ 0x6099C
 	mov	gs:[pPerdu],(1AF0Eh-81EB9h)		; @ 0x1AF0E
 	mov	gs:[pPlayTrack],(28650h-81EB9h)		; @ 0x28650
+	mov	gs:[pConvenientRetF],(7F4AAh-81EB9h)	; @ 0x7F4AA
+	mov	gs:[psosDIGIStart],(82543h-81EB9h)	; @ 0x82543
+	mov	gs:[psosDIGIStop],(82B5Ch-81EB9h)	; @ 0x82B5C
+	mov	gs:[pStartVignette],(3512Ch-81EB9h)	; @ 0x3512C
+	mov	gs:[pObjectsLoaded],(44374h-81EB9h)	; @ 0x44374
+	mov	gs:[pManageSndEvent],(6FD10h-81EB9h)	; @ 0x6FD10
+	mov	gs:[pStartCDbbdead],(709EFh-81EB9h)	; @ 0x709EF
+	mov	gs:[pStopCD],(1AFA8h-81EB9h)		; @ 0x1AFA8
+	mov	gs:[pStartFreezeSnd],(71274h-81EB9h)	; @ 0x71274
+	mov	gs:[pStopFreezeSnd],(71288h-81EB9h)	; @ 0x71288
+	mov	gs:[pExitSignEOA1],(6087Fh-81EB9h)	; @ 0x6087F
+	mov	gs:[pExitSignEOA2],(608D2h-81EB9h)	; @ 0x608D2
+	mov	gs:[pExitSignEOA3],(609D5h-81EB9h)	; @ 0x609D5
+	mov	gs:[pDoAnimFrozen],(59B95h-81EB9h)	; @ 0x59B95
+	mov	gs:[pSuspence],(68A5Ch-81EB9h)		; @ 0x68A5C
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -817,6 +1064,9 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	; mov	gs:[phighest_atrack],(17F952h-137634h)	; @ 0x17F952
 	; mov	gs:[pcd_driveletter],(170AB7h-137634h)	; @ 0x170AB7
 	mov	gs:[plang],(170AC5h-137634h)		; @ 0x170AC5
+	mov	gs:[pdwDETDriverIndex],(181C08h-137634h); @ 0x181C08
+	mov	gs:[plevel],(16DE80h-137634h)		; @ 0x16DE80
+	mov	gs:[pflagCDPlay],(138FA8h-137634h)	; @ 0x138FA8
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x821FF in this version
@@ -837,11 +1087,28 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pLevelEnd1],(15597h-821FFh)		; @ 0x15597
 	mov	gs:[pLevelEnd2],(15BA6h-821FFh)		; @ 0x15BA6
 	; displacements are same as German for these two:
-	mov	gs:[pExitSign1],(6035Fh-8220Fh)		; @ 0x6034F
+	mov	gs:[pExitSign1],(60238h-8220Fh)		; @ 0x60228
 	mov	gs:[pExitSign2],(604BCh-8220Fh)		; @ 0x604AC
 	; these two are different:
 	mov	gs:[pPerdu],(1AF1Eh-821FFh)		; @ 0x1AF1E
 	mov	gs:[pPlayTrack],(28660h-821FFh)		; @ 0x28660
+	; these are copied from IT-SP-DU above:
+	mov	gs:[pConvenientRetF],(7F7F0h-821FFh)	; @ 0x7F7F0
+	mov	gs:[psosDIGIStart],(82889h-821FFh)	; @ 0x82889
+	mov	gs:[psosDIGIStop],(82EA2h-821FFh)	; @ 0x82EA2
+	mov	gs:[pStartVignette],(34DECh-821FFh)	; @ 0x34DEC
+	mov	gs:[pObjectsLoaded],(44054h-821FFh)	; @ 0x44054
+	mov	gs:[pManageSndEvent],(700A0h-821FFh)	; @ 0x700A0
+	mov	gs:[pStartCDbbdead],(70D7Fh-821FFh)	; @ 0x70D7F
+	mov	gs:[pStopCD],(1AFB8h-821FFh)		; @ 0x1AFB8
+	mov	gs:[pStartFreezeSnd],(71604h-821FFh)	; @ 0x71604
+	mov	gs:[pStopFreezeSnd],(71618h-821FFh)	; @ 0x71618
+	mov	gs:[pExitSignEOA1],(6038Fh-821FFh)	; @ 0x6038F
+	mov	gs:[pExitSignEOA2],(603E2h-821FFh)	; @ 0x603E2
+	mov	gs:[pExitSignEOA3],(604E5h-821FFh)	; @ 0x604E5
+	mov	gs:[pDoAnimFrozen],(596A5h-821FFh)	; @ 0x596A5
+	; a new one:
+	mov	gs:[pSuspence],(68DE8h-821FFh)		; @ 0x68DE8
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -862,6 +1129,9 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	; mov	gs:[phighest_atrack],(17F952h-137634h)	; @ 0x17F952
 	; mov	gs:[pcd_driveletter],(170AB7h-137634h)	; @ 0x170AB7
 	mov	gs:[plang],(170AC5h-137634h)		; @ 0x170AC5
+	mov	gs:[pdwDETDriverIndex],(181C08h-137634h); @ 0x181C08
+	mov	gs:[plevel],(16DE80h-137634h)		; @ 0x16DE80
+	mov	gs:[pflagCDPlay],(138FA8h-137634h)	; @ 0x138FA8
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x8220F in this version
@@ -879,10 +1149,31 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pLevelStart2],(156F6h-8220Fh)	; @ 0x156F6
 	mov	gs:[pLevelEnd1],(15597h-8220Fh)		; @ 0x15597
 	mov	gs:[pLevelEnd2],(15BA6h-8220Fh)		; @ 0x15BA6
-	mov	gs:[pExitSign1],(6035Fh-8220Fh)		; @ 0x6035F
+	mov	gs:[pExitSign1],(60238h-8220Fh)		; @ 0x60238
 	mov	gs:[pExitSign2],(604BCh-8220Fh)		; @ 0x604BC
 	mov	gs:[pPerdu],(1AF1Eh-8220Fh)		; @ 0x1AF1E
 	mov	gs:[pPlayTrack],(28660h-8220Fh)		; @ 0x28660
+	; these three are copied from IT-SP-DU above (same displacements):
+	mov	gs:[pConvenientRetF],(7F7F0h-821FFh)	; @ 0x7F800
+	mov	gs:[psosDIGIStart],(82889h-821FFh)	; @ 0x82899
+	mov	gs:[psosDIGIStop],(82EA2h-821FFh)	; @ 0x82EB2
+	; these two are different:
+	mov	gs:[pStartVignette],(34DECh-8220Fh)	; @ 0x34DEC
+	mov	gs:[pObjectsLoaded],(44054h-8220Fh)	; @ 0x44054
+	; these two are copied from IT-SP-DU above (same displacements):
+	mov	gs:[pManageSndEvent],(700A0h-821FFh)	; @ 0x700B0
+	mov	gs:[pStartCDbbdead],(70D7Fh-821FFh)	; @ 0x70D8F
+	; this is different:
+	mov	gs:[pStopCD],(1AFB8h-8220Fh)		; @ 0x1AFB8
+	; the rest are copied from IT-SP-DU above (same displacements):
+	mov	gs:[pStartFreezeSnd],(71604h-821FFh)	; @ 0x71614
+	mov	gs:[pStopFreezeSnd],(71618h-821FFh)	; @ 0x71628
+	mov	gs:[pExitSignEOA1],(6038Fh-821FFh)	; @ 0x6039F
+	mov	gs:[pExitSignEOA2],(603E2h-821FFh)	; @ 0x603F2
+	mov	gs:[pExitSignEOA3],(604E5h-821FFh)	; @ 0x604F5
+	mov	gs:[pDoAnimFrozen],(596A5h-821FFh)	; @ 0x596B5
+	; a new one:
+	mov	gs:[pSuspence],(68DF8h-8220Fh)		; @ 0x68DF8
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -904,12 +1195,15 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[ptimeCd],(135F74h-137634h)		; @ 0x135F74
 	mov	gs:[pcdTime],(16E754h-137634h)		; @ 0x16E754
 	; mov	gs:[prbook_table],(17F7C7h-137634h)	; @ 0x17F7C7
-	mov	gs:[prbook_lentable],(19595Bh-137634h)	; @ 0x19595B
+	mov	gs:[prbook_lentable],(17F95Bh-137634h)	; @ 0x17F95B
 	; mov	gs:[prbook_tablefl],(17FDFEh-137634h)	; @ 0x17FDFE
 	; mov	gs:[plowest_atrack],(17F7C1h-137634h)	; @ 0x17F7C1
 	; mov	gs:[phighest_atrack],(17F7C2h-137634h)	; @ 0x17F7C2
 	; mov	gs:[pcd_driveletter],(17091Bh-137634h)	; @ 0x17091B
 	mov	gs:[plang],(170928h-137634h)		; @ 0x170928
+	mov	gs:[pdwDETDriverIndex],(181A78h-137634h); @ 0x181A78
+	mov	gs:[plevel],(16DCF0h-137634h)		; @ 0x16DCF0
+	mov	gs:[pflagCDPlay],(138FA8h-137634h)	; @ 0x138FA8
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x81CA8 in this version
@@ -927,10 +1221,25 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pLevelStart2],(156E6h-81CA8h)	; @ 0x156E6
 	mov	gs:[pLevelEnd1],(15587h-81CA8h)		; @ 0x15587
 	mov	gs:[pLevelEnd2],(15B96h-81CA8h)		; @ 0x15B96
-	mov	gs:[pExitSign1],(5FEBFh-81CA8h)		; @ 0x5FEBF
+	mov	gs:[pExitSign1],(5FD98h-81CA8h)		; @ 0x5FD98
 	mov	gs:[pExitSign2],(6001Ch-81CA8h)		; @ 0x6001C
 	mov	gs:[pPerdu],(1ADEEh-81CA8h)		; @ 0x1ADEE
 	mov	gs:[pPlayTrack],(283D8h-81CA8h)		; @ 0x283D8
+	mov	gs:[pConvenientRetF],(7F2B4h-81CA8h)	; @ 0x7F2B4
+	mov	gs:[psosDIGIStart],(82332h-81CA8h)	; @ 0x82332
+	mov	gs:[psosDIGIStop],(8294Bh-81CA8h)	; @ 0x8294B
+	mov	gs:[pStartVignette],(34B3Ch-81CA8h)	; @ 0x34B3C
+	mov	gs:[pObjectsLoaded],(43DA4h-81CA8h)	; @ 0x43DA4
+	mov	gs:[pManageSndEvent],(6FBE0h-81CA8h)	; @ 0x6FBE0
+	mov	gs:[pStartCDbbdead],(708BFh-81CA8h)	; @ 0x708BF
+	mov	gs:[pStopCD],(1AE88h-81CA8h)		; @ 0x1AE88
+	mov	gs:[pStartFreezeSnd],(71144h-81CA8h)	; @ 0x71144
+	mov	gs:[pStopFreezeSnd],(71158h-81CA8h)	; @ 0x71158
+	mov	gs:[pExitSignEOA1],(5FEFFh-81CA8h)	; @ 0x5FEFF
+	mov	gs:[pExitSignEOA2],(5FF52h-81CA8h)	; @ 0x5FF52
+	mov	gs:[pExitSignEOA3],(60055h-81CA8h)	; @ 0x60055
+	mov	gs:[pDoAnimFrozen],(59215h-81CA8h)	; @ 0x59215
+	mov	gs:[pSuspence],(68928h-81CA8h)		; @ 0x68928
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -951,6 +1260,9 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	; mov	gs:[phighest_atrack],(17F662h-137634h)	; @ 0x17F662
 	; mov	gs:[pcd_driveletter],(1706BBh-137634h)	; @ 0x1706BB
 	mov	gs:[plang],(1706C8h-137634h)		; @ 0x1706C8
+	mov	gs:[pdwDETDriverIndex],(181818h-137634h); @ 0x181818
+	mov	gs:[plevel],(16DA90h-137634h)		; @ 0x16DA90
+	mov	gs:[pflagCDPlay],(138F48h-137634h)	; @ 0x138F48
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x81216 in this version
@@ -968,10 +1280,25 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pLevelStart2],(156DAh-81216h)	; @ 0x156DA
 	mov	gs:[pLevelEnd1],(1557Bh-81216h)		; @ 0x1557B
 	mov	gs:[pLevelEnd2],(15B7Eh-81216h)		; @ 0x15B7E
-	mov	gs:[pExitSign1],(5FD2Fh-81216h)		; @ 0x5FD2F
+	mov	gs:[pExitSign1],(5FC08h-81216h)		; @ 0x5FC08
 	mov	gs:[pExitSign2],(5FE8Ch-81216h)		; @ 0x5FE8C
 	mov	gs:[pPerdu],(1ACBEh-81216h)		; @ 0x1ACBE
 	mov	gs:[pPlayTrack],(282C4h-81216h)		; @ 0x282C4
+	mov	gs:[pConvenientRetF],(7E7F4h-81216h)	; @ 0x7E7F4
+	mov	gs:[psosDIGIStart],(818A0h-81216h)	; @ 0x818A0
+	mov	gs:[psosDIGIStop],(81EB9h-81216h)	; @ 0x81EB9
+	mov	gs:[pStartVignette],(3491Ch-81216h)	; @ 0x3491C
+	mov	gs:[pObjectsLoaded],(43AC3h-81216h)	; @ 0x43AC3
+	mov	gs:[pManageSndEvent],(6F130h-81216h)	; @ 0x6F130
+	mov	gs:[pStartCDbbdead],(6FE0Fh-81216h)	; @ 0x6FE0F
+	mov	gs:[pStopCD],(1AD58h-81216h)		; @ 0x1AD58
+	mov	gs:[pStartFreezeSnd],(70694h-81216h)	; @ 0x70694
+	mov	gs:[pStopFreezeSnd],(706A8h-81216h)	; @ 0x706A8
+	mov	gs:[pExitSignEOA1],(5FD6Fh-81216h)	; @ 0x5FD6F
+	mov	gs:[pExitSignEOA2],(5FDC2h-81216h)	; @ 0x5FDC2
+	mov	gs:[pExitSignEOA3],(5FEC5h-81216h)	; @ 0x5FEC5
+	mov	gs:[pDoAnimFrozen],(59085h-81216h)	; @ 0x59085
+	mov	gs:[pSuspence],(6878Ch-81216h)		; @ 0x6878C
 
 	jmp	@@payload_fixedup
 
@@ -990,6 +1317,10 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	; mov	gs:[phighest_atrack],(17F7B2h-137624h)	; @ 0x17F7B2
 	; mov	gs:[pcd_driveletter],(17090Bh-137624h)	; @ 0x17090B
 	mov	gs:[plang],(170918h-137624h)		; @ 0x170918
+	; these three are copied from v1.12 US above (same displacements):
+	mov	gs:[pdwDETDriverIndex],(181A78h-137634h); @ 0x181A68
+	mov	gs:[plevel],(16DCF0h-137634h)		; @ 0x16DCE0
+	mov	gs:[pflagCDPlay],(138FA8h-137634h)	; @ 0x138F98
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x81508 in this version
@@ -1007,10 +1338,25 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pLevelStart2],(156E6h-81508h)	; @ 0x156E6
 	mov	gs:[pLevelEnd1],(15587h-81508h)		; @ 0x15587
 	mov	gs:[pLevelEnd2],(15B96h-81508h)		; @ 0x15B96
-	mov	gs:[pExitSign1],(5F71Fh-81508h)		; @ 0x5F71F
+	mov	gs:[pExitSign1],(5F5F8h-81508h)		; @ 0x5F5F8
 	mov	gs:[pExitSign2],(5F87Ch-81508h)		; @ 0x5F87C
 	mov	gs:[pPerdu],(1ADEEh-81508h)		; @ 0x1ADEE
 	mov	gs:[pPlayTrack],(283D8h-81508h)		; @ 0x283D8
+	mov	gs:[pConvenientRetF],(7EB14h-81508h)	; @ 0x7EB14
+	mov	gs:[psosDIGIStart],(81B92h-81508h)	; @ 0x81B92
+	mov	gs:[psosDIGIStop],(821ABh-81508h)	; @ 0x821AB
+	mov	gs:[pStartVignette],(34B3Ch-81508h)	; @ 0x34B3C
+	mov	gs:[pObjectsLoaded],(43B7Ch-81508h)	; @ 0x43B7C
+	mov	gs:[pManageSndEvent],(6F440h-81508h)	; @ 0x6F440
+	mov	gs:[pStartCDbbdead],(7011Fh-81508h)	; @ 0x7011F
+	mov	gs:[pStopCD],(1AE88h-81508h)		; @ 0x1AE88
+	mov	gs:[pStartFreezeSnd],(709A4h-81508h)	; @ 0x709A4
+	mov	gs:[pStopFreezeSnd],(709B8h-81508h)	; @ 0x709B8
+	mov	gs:[pExitSignEOA1],(5F75Fh-81508h)	; @ 0x5F75F
+	mov	gs:[pExitSignEOA2],(5F7B2h-81508h)	; @ 0x5F7B2
+	mov	gs:[pExitSignEOA3],(5F8B5h-81508h)	; @ 0x5F8B5
+	mov	gs:[pDoAnimFrozen],(58A75h-81508h)	; @ 0x58A75
+	mov	gs:[pSuspence],(68188h-81508h)		; @ 0x68188
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -1031,6 +1377,9 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	; mov	gs:[phighest_atrack],(17F762h-137624h)	; @ 0x17F762
 	; mov	gs:[pcd_driveletter],(1708BBh-137624h)	; @ 0x1708BB
 	mov	gs:[plang],(1708C8h-137624h)		; @ 0x1708C8
+	mov	gs:[pdwDETDriverIndex],(181A18h-137624h); @ 0x181A18
+	mov	gs:[plevel],(16DC90h-137624h)		; @ 0x16DC90
+	mov	gs:[pflagCDPlay],(138FC8h-137624h)	; @ 0x138FC8
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x81678 in this version
@@ -1048,10 +1397,27 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pLevelStart2],(15756h-81678h)	; @ 0x15756
 	mov	gs:[pLevelEnd1],(155F7h-81678h)		; @ 0x155F7
 	mov	gs:[pLevelEnd2],(15C06h-81678h)		; @ 0x15C06
-	mov	gs:[pExitSign1],(5F6CFh-81678h)		; @ 0x5F6CF
+	mov	gs:[pExitSign1],(5F5A8h-81678h)		; @ 0x5F5A8
 	mov	gs:[pExitSign2],(5F82Ch-81678h)		; @ 0x5F82C
 	mov	gs:[pPerdu],(1AE1Eh-81678h)		; @ 0x1AE1E
 	mov	gs:[pPlayTrack],(28408h-81678h)		; @ 0x28408
+	; these three are copied from v1.12 EU above (same displacements):
+	mov	gs:[pConvenientRetF],(7EB14h-81508h)	; @ 0x7EC84
+	mov	gs:[psosDIGIStart],(81B92h-81508h)	; @ 0x81D02
+	mov	gs:[psosDIGIStop],(821ABh-81508h)	; @ 0x8231B
+	; the rest are all different
+	mov	gs:[pStartVignette],(34BC8h-81678h)	; @ 0x34BC8
+	mov	gs:[pObjectsLoaded],(43C0Ch-81678h)	; @ 0x43C0C
+	mov	gs:[pManageSndEvent],(6F510h-81678h)	; @ 0x6F510
+	mov	gs:[pStartCDbbdead],(701EFh-81678h)	; @ 0x701EF
+	mov	gs:[pStopCD],(1AEB8h-81678h)		; @ 0x1AEB8
+	mov	gs:[pStartFreezeSnd],(70A74h-81678h)	; @ 0x70A74
+	mov	gs:[pStopFreezeSnd],(70A88h-81678h)	; @ 0x70A88
+	mov	gs:[pExitSignEOA1],(5F70Fh-81678h)	; @ 0x5F70F
+	mov	gs:[pExitSignEOA2],(5F762h-81678h)	; @ 0x5F762
+	mov	gs:[pExitSignEOA3],(5F865h-81678h)	; @ 0x5F865
+	mov	gs:[pDoAnimFrozen],(58A25h-81678h)	; @ 0x58A25
+	mov	gs:[pSuspence],(68138h-81678h)		; @ 0x68138
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -1076,6 +1442,9 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	; mov	gs:[phighest_atrack],(17F3C2h-137584h)	; @ 0x17F3C2
 	; mov	gs:[pcd_driveletter],(170419h-137584h)	; @ 0x170419
 	mov	gs:[plang],(170428h-137584h)		; @ 0x170428
+	mov	gs:[pdwDETDriverIndex],(181588h-137584h); @ 0x181588
+	mov	gs:[plevel],(16D7A0h-137584h)		; @ 0x16D7A0
+	mov	gs:[pflagCDPlay],(138F24h-137584h)	; @ 0x138F24
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x81548 in this version
@@ -1093,10 +1462,27 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pLevelStart2],(1571Bh-81548h)	; @ 0x1571B
 	mov	gs:[pLevelEnd1],(155BDh-81548h)		; @ 0x155BD
 	mov	gs:[pLevelEnd2],(15B9Ch-81548h)		; @ 0x15B9C
-	mov	gs:[pExitSign1],(5F58Fh-81548h)		; @ 0x5F58F
+	mov	gs:[pExitSign1],(5F468h-81548h)		; @ 0x5F468
 	mov	gs:[pExitSign2],(5F6ECh-81548h)		; @ 0x5F6EC
 	mov	gs:[pPerdu],(1ABC2h-81548h)		; @ 0x1ABC2
 	mov	gs:[pPlayTrack],(28868h-81548h)		; @ 0x28868
+	; these three are copied from v1.12 EU above (same displacements):
+	mov	gs:[pConvenientRetF],(7EB14h-81508h)	; @ 0x7EB54
+	mov	gs:[psosDIGIStart],(81B92h-81508h)	; @ 0x81BD2
+	mov	gs:[psosDIGIStop],(821ABh-81508h)	; @ 0x821EB
+	; the rest are all different
+	mov	gs:[pStartVignette],(350F4h-81548h)	; @ 0x350F4
+	mov	gs:[pObjectsLoaded],(43E2Ch-81548h)	; @ 0x43E2C
+	mov	gs:[pManageSndEvent],(6F4B0h-81548h)	; @ 0x6F4B0
+	mov	gs:[pStartCDbbdead],(7018Fh-81548h)	; @ 0x7018F
+	mov	gs:[pStopCD],(1AC5Ch-81548h)		; @ 0x1AC5C
+	mov	gs:[pStartFreezeSnd],(70A14h-81548h)	; @ 0x70A14
+	mov	gs:[pStopFreezeSnd],(70A28h-81548h)	; @ 0x70A28
+	mov	gs:[pExitSignEOA1],(5F5CFh-81548h)	; @ 0x5F5CF
+	mov	gs:[pExitSignEOA2],(5F622h-81548h)	; @ 0x5F622
+	mov	gs:[pExitSignEOA3],(5F725h-81548h)	; @ 0x5F725
+	mov	gs:[pDoAnimFrozen],(58A61h-81548h)	; @ 0x58A61
+	mov	gs:[pSuspence],(68150h-81548h)		; @ 0x68150
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -1106,6 +1492,11 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	cs:[spoof_info.addr_leadout],401E19h
 
 @@payload_fixedup:
+	; These two are always at this offset from each other, trust me...
+	mov	eax,gs:[pExitSign1]
+	sub	eax,2Eh
+	mov	gs:[pExitStopAllSnd],eax
+
 	; Next we need to open up Rayman's config file and get the driver ID
 	mov	ax,3D00h	; OPEN read-only
 	mov	dx,offset raycfg
@@ -1936,6 +2327,15 @@ payload	segment use32
 @@:
 	mov	[rayman_cs_asds],ax
 
+	; Read in the "MIDI" track data
+	lea	edx,midi_file_path
+	call	read_ambient_file
+	jc	@F
+	mov	[midi_file_seg],ax
+	mov	[midi_file_hdl],esi
+	mov	[midi_file_size],ecx
+@@:
+
 	pop	esi
 	pop	edx
 	pop	ecx
@@ -2277,14 +2677,23 @@ setup_hooks	proc near	uses ecx edx
 
 	; Hooks to make the PC version use CD audio where it normally doesn't
 	; (but other versions normally do)
-	; Actually, screw the exit-sign one. Not only does the fanfare always get
-	; cut off for an actual exit sign, but it also gets engaged for certain
-	; non-exit-sign events (e.g. beating Mister Sax, using the WINMAP cheat, etc.)
-	; mov	edx,[pExitSign1]
-	; call	set_hookpoint
-	; mov	edx,[pExitSign2]
-	; call	set_hookpoint
+	mov	edx,[pExitSign1]
+	call	set_hookpoint
+	mov	edx,[pExitSign2]
+	call	set_hookpoint
 	mov	edx,[pPerdu]
+	call	set_hookpoint
+	mov	edx,[pSuspence]
+	call	set_hookpoint
+
+	; Hooks to delay level transition until fanfare CD audio has fully played out
+	mov	edx,[pExitSignEOA1]
+	call	set_hookpoint
+	mov	edx,[pExitSignEOA2]
+	call	set_hookpoint
+	mov	edx,[pExitSignEOA3]
+	call	set_hookpoint
+	mov	edx,[pDoAnimFrozen]
 	call	set_hookpoint
 
 	; Hooks to select the language-appropriate cutscene music
@@ -2301,6 +2710,24 @@ setup_hooks	proc near	uses ecx edx
 	mov	edx,[pCutsceneRead]
 	test	edx,edx
 	jz	@F
+	call	set_hookpoint
+
+@@:	; Hooks to enable "MIDI" tracks (if available)
+	cmp	[midi_file_seg],0
+	jz	@F
+	mov	edx,[pStartVignette]
+	call	set_hookpoint
+	mov	edx,[pObjectsLoaded]
+	call	set_hookpoint
+	mov	edx,[pManageSndEvent]
+	call	set_hookpoint
+	mov	edx,[pStartCDbbdead]
+	call	set_hookpoint
+	mov	edx,[pStartFreezeSnd]
+	call	set_hookpoint
+	mov	edx,[pStopFreezeSnd]
+	call	set_hookpoint
+	mov	edx,[pExitStopAllSnd]
 	call	set_hookpoint
 
 @@:
@@ -2469,6 +2896,264 @@ free_selectors	proc near	uses ax bx ecx edx esi
 	ret
 free_selectors	endp
 
+; Play the ALth audio track in the "MIDI" file
+play_ambient_track	proc near	uses es
+	pushad
+	; Convert byte track index to dword
+	cbw
+	cwde
+
+	mov	es,[midi_file_seg]
+	assume	es:nothing
+	; Clamp within the tracks available (count is at ES:4)
+	cmp	eax,es:[4]
+	jb	@F
+	mov	eax,es:[4]
+	dec	eax
+@@:
+	; Set ESI to offset and EDX to length
+	mov	esi,es:[eax*8+8]
+	mov	edx,es:[eax*8+0Ch]
+
+	; Already playing this track?
+	cmp	[midi_cur_track],eax
+	je	@F
+	; Otherwise, if we're already playing a track, stop it...
+	call	stop_ambient_track	; preserves EAX
+
+	; Remember which track we're playing
+	mov	[midi_cur_track],eax
+
+	sub	esp,size _SOS_START_SAMPLE
+	push	ss
+	pop	es
+	mov	edi,esp
+
+	mov	ecx,(size _SOS_START_SAMPLE) SHR 2
+	xor	eax,eax
+	rep	stosd
+
+	; Use #3, since Rayman uses #2 (and Designer also uses #1)
+	mov	[esp]._SOS_START_SAMPLE.wSampleID,3
+	; Play the *mono* PCM data across both channels
+	mov	[esp]._SOS_START_SAMPLE.wChannel,2
+	; Max volume
+	mov	[esp]._SOS_START_SAMPLE.wVolume,7FFFh
+
+	; Point at the data
+	mov	dword ptr [esp]._SOS_START_SAMPLE.lpSamplePtr,esi
+	mov	cx,[midi_file_seg]
+	mov	word ptr [esp+4]._SOS_START_SAMPLE.lpSamplePtr,cx
+	; Set the length
+	mov	[esp]._SOS_START_SAMPLE.dwSampleSize,edx
+
+	; Make it loop
+	mov	[esp]._SOS_START_SAMPLE.wSampleFlags, _STAGE_LOOP+_LOOPING
+	; Loop the full thing, from the beginning!
+	mov	[esp]._SOS_START_SAMPLE.dwSampleLoopLength,edx
+	mov	[esp]._SOS_START_SAMPLE.dwSampleLoopPoint,eax
+	; Loop forever
+	mov	[esp]._SOS_START_SAMPLE.wLoopCount,-1
+
+	; Call the function
+	mov	ecx,ss		; segment of lpStartSample
+	mov	ebx,esp		; offset of lpStartSample
+	mov	eax,[pdwDETDriverIndex]
+	mov	es,[rayman_ds]
+	mov	eax,es:[eax]	; int drvindex
+
+	call	sosDIGIStartSample
+	mov	[midi_sample_idx],eax
+
+	add	esp,size _SOS_START_SAMPLE
+@@:
+	popad
+	ret
+play_ambient_track	endp
+
+stop_ambient_track	proc near
+	mov	ecx,[midi_sample_idx]
+	test	cx,cx
+	js	@F	; skip if negative
+
+	pushad
+	mov	edx,ecx	; int sample
+	mov	eax,[pdwDETDriverIndex]
+	mov	eax,es:[eax]
+	call	sosDIGIStopSample
+	popad
+
+@@:
+	xor	ecx,ecx
+	dec	ecx
+	; Set these to -1 to indicate no ambient playing anymore
+	mov	[midi_sample_idx],ecx
+	mov	[midi_cur_track],ecx
+	ret
+stop_ambient_track	endp
+
+assume	ds:nothing
+
+; Call a "near" function in Rayman (offset in EDI) from within the payload.
+; This code is pretty evil tbh, but we're just using it to interact with the sound system.
+call_code_in_rayman	proc near
+	push	ds
+	push	es
+	; Make sure the segments are sane...
+	mov	ds,[rayman_ds]
+	mov	es,[rayman_ds]
+
+	; Create a RETF frame so the called function will return here
+	push	cs
+	push	offset @F
+	; Create a RETN frame so the near function will return to a RETF trampoline
+	push	[pConvenientRetF]
+	; Create a RETF frame so we can "return" to the desired code in Rayman
+	push	dword ptr [rayman_cs]
+	push	edi
+	; "Return" to Rayman's code
+	retf
+@@:
+	; OK, Rayman's code should have returned to us now - return to our (near) caller
+	pop	es
+	pop	ds
+	ret
+call_code_in_rayman	endp
+
+; int sosDIGIStartSample@<eax>(int drvidx@<eax>, _SOS_START_SAMPLE far *lpStartSample@<cx:ebx>);
+; This is a wrapper function that calls through to the actual sosDIGIStartSample in Rayman's code
+sosDIGIStartSample	proc near
+	mov	edi,[psosDIGIStart]
+	jmp	call_code_in_rayman
+sosDIGIStartSample	endp
+
+; int __fastcall sosDIGIStopSample(int drvidx, int sample);
+; This is a wrapper function that calls through to the actual sosDIGIStopSample in Rayman's code
+sosDIGIStopSample	proc near
+	mov	edi,[psosDIGIStop]
+	jmp	call_code_in_rayman
+sosDIGIStopSample	endp
+
+; Open an audio file (name in DS:EDX), allocate a buffer, read it in,
+; and return:
+; * CF clear on success, set on failure
+; * Selector for audio data in AX
+; * Memory block handle in ESI
+; * Size in ECX
+read_ambient_file	proc near	uses edx ebp ds bx di
+	mov	ax,3D00h	; OPEN read-only
+	int	21h
+	jnc	@F
+	ret
+@@:
+	mov	bx,ax
+	mov	ax,4202h	; LSEEK from end
+	xor	cx,cx
+	mov	dx,cx
+	int	21h
+
+	; Now the filesize is in DX:AX --> save in EBP...
+	mov	bp,dx
+	shl	ebp,10h
+	mov	bp,ax
+	; and allocate this much memory
+	xchg	bx,dx		; keep the file handle in DX!
+	mov	cx,ax
+	mov	ax,501h		; allocate Protected Mode memory
+	int	31h
+	xchg	bx,dx		; file handle back into BX
+	jc	@@close_and_ret
+
+	; Now the address is in DX:CX, and the handle in SI:DI
+	shl	esi,10h
+	mov	si,di		; get the full handle value into ESI
+	; Next we need to create a selector to point at this memory
+	mov	di,cx		; save lower half of linear address
+	xor	ax,ax		; alloc selectors
+	mov	cx,1		; just the one
+	int	31h
+	jc	@@free_and_fail
+
+	; Selector is now in AX - need to set its base to DX:DI...
+	mov	cx,dx
+	mov	dx,di
+	mov	di,bx		; save file handle in DI
+	mov	bx,ax		; get selector into BX
+	mov	ax,7		; set base address
+	int	31h
+	jc	@@free_selector_and_fail
+
+	; ... and its size to EBP
+	mov	ax,8		; set limit
+	dec	ebp		; limit = size-1
+	mov	dx,bp
+	ror	ebp,10h
+	mov	cx,bp
+	ror	ebp,10h
+	inc	ebp		; restore the size
+	test	cx,cx
+	jz	@F
+	or	dx,0FFFh	; round up to nearest page!
+@@:	int	31h
+	jc	@@free_selector_and_fail
+
+	; Go back to the beginning of the file...
+	mov	ds,bx		; prepare to read into our new selector
+	mov	ax,4200h	; LSEEK from beginning
+	mov	bx,di		; file handle was saved in DI
+	xor	ecx,ecx
+	mov	edx,ecx
+	int	21h
+
+	; ... and now we can read it into the segment!
+	mov	ah,3Fh		; READ
+	mov	ecx,ebp		; count
+	; EDX is already zero from above (read to beginning of segment)
+	int	21h
+
+	mov	ecx,ds:[0]	; Get the signature for verification
+	mov	bx,ds		; BX needs to be selector if we fail
+	mov	ds,dx		; zero DS in case we fail
+	jc	@@free_selector_and_fail
+
+	; Check the signature...
+	cmp	ecx,'T' + ('P' SHL 8) + ('L' SHL 10h) + ('S' SHL 18h)
+	; If they are equal, it also keeps CF clear
+	jne	@@free_selector_and_fail
+
+	; We're done!
+	xchg	bx,di		; get file handle in BX so we can close it
+
+@@close_and_ret:
+	setc	cl		; remember carry flag!
+	mov	ah,3Eh		; CLOSE
+	int	21h
+	rcr	cl,1		; restore carry
+
+	jc	@F
+	mov	ax,di		; get selector into AX for return
+	mov	ecx,ebp		; get size into ECX for return
+@@:
+	ret
+
+; Free the selector and fail the function call
+@@free_selector_and_fail:
+	mov	ax,1		; free selector
+	int	31h
+	; File handle was saved in DI, get it back into BX
+	mov	bx,di
+; Free the memory and fail the function call
+@@free_and_fail:
+	; Memory handle should be in ESI, get it into SI:DI
+	mov	di,si
+	shr	esi,10h
+	mov	ax,502h		; free Protected Mode memory
+	int	31h
+	; Indicate failure:
+	stc
+	jmp	@@close_and_ret
+read_ambient_file	endp
+
 ; We're screwed - print a message (in EDX)
 ; and pull down the entire program
 bailout		proc near
@@ -2509,11 +3194,27 @@ pLevelStart1	dd ?	; Corresponds to "Now in level" in Dosbox TPLS
 pLevelStart2	dd ?
 pLevelEnd1	dd ?	; Corresponds to "No longer in level" in Dosbox TPLS
 pLevelEnd2	dd ?
+pExitStopAllSnd	dd ?	; Level successfully completed, game calls "stop_all_snd"
 pExitSign1	dd ?	; Rayman reaches an exit sign, so a fanfare should play
 pExitSign2	dd ?
 pPerdu		dd ?	; Rayman is dead, so his death track should play
 pPlayTrack	dd ?	; Function in Rayman's code for playing a numbered CD audio track
 pCutsceneRead	dd 0	; A wrapper function for _dos_read which is broken in v1.21 US
+pConvenientRetF	dd ?	; Finds a convenient RETF, steps outta the shade, says something like...
+psosDIGIStart	dd ?	; Function in Rayman's code to play a sound sample
+psosDIGIStop	dd ?	; Function in Rayman's code to stop a sound sample
+pStartVignette	dd ?	; Game shows "loading" vignette, we start playing the drums!
+pObjectsLoaded	dd ?	; Objects have all been loaded from a LEV file, and fixed up
+pManageSndEvent	dd ?	; Null function associated with "Ambient Starter" collision
+pStartCDbbdead	dd ?	; Call to "start_cd_rap" from "PlaySnd", when a boss is defeated
+pStopCD		dd ?	; Function in Rayman's code to stop CD audio and reset the timer
+pStartFreezeSnd	dd ?	; Function in Rayman's code to freeze sound when game is paused
+pStopFreezeSnd	dd ?	; Function in Rayman's code to unfreeze sound when game is resumed
+pExitSignEOA1	dd ?	; Exit sign code is checking if Rayman's animation has finished:
+pExitSignEOA2	dd ?	;; We need it to believe the answer is "NO" at least until our CD
+pExitSignEOA3	dd ?	;; audio is finished playing!
+pDoAnimFrozen	dd ?	; Call to "DO_ANIM" on Rayman while game is otherwise frozen on exit sign
+pSuspence	dd ?	; Call to null sub from "INIT_VIGNET", which should start Suspense music
 end_textptrs:
 
 ; Pointers to data in Rayman
@@ -2530,6 +3231,9 @@ prbook_lentable	dd ?
 ;phighest_atrack	dd ?
 ;pcd_driveletter dd ?	; Pointer to Rayman's CD-ROM drive letter
 plang		dd ?
+pdwDETDriverIndex dd ?	; Pointer to Rayman's SOS driver index
+plevel		dd ?	; Pointer to level info
+pflagCDPlay	dd ?	; Frame counter from when CD track ends to when it starts again (four frames)
 end_dataptrs:
 
 ; Track on-the-fly music tampering
@@ -2551,6 +3255,103 @@ callback_RMCS	rmcall <?>
 old_intF5	label fword
 old_intF5_off	dd ?
 old_intF5_seg	dw ?
+
+; Ambient Starters to inject
+injection_table:
+	; Pink Plant Woods part 2: we can replace one BALLE1 which leaves four spare for the one hunter in the map...
+	InjectableAmbientStarter<1,2,991,375,1,TYPE_BALLE1>
+
+	; Bongo Hills part 4: we can replace BNOTE because (thankfully!) there are loads of them, and Mister Sax isn't in the map
+	InjectableAmbientStarter<2,4,1310,288,3,TYPE_BNOTE>
+	InjectableAmbientStarter<2,4,2663,355,0,TYPE_BNOTE>
+	InjectableAmbientStarter<2,4,236,546,3,TYPE_BNOTE>
+	InjectableAmbientStarter<2,4,2834,686,4,TYPE_BNOTE>
+	InjectableAmbientStarter<2,4,1674,790,0,TYPE_BNOTE>
+	InjectableAmbientStarter<2,4,2736,829,4,TYPE_BNOTE>
+
+	; Twilight Gulch part 1: we can replace BB1_PLAT because Mister Stone isn't in the map
+	InjectableAmbientStarter<3,1,83,15,0,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,1,540,93,5,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,1,1496,114,0,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,1,1915,133,6,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,1,372,316,0,TYPE_BB1_PLAT>
+	; No BB1_PLATs left, so steal one each of these four, and hope there aren't any noticeable consequences...
+	InjectableAmbientStarter<3,1,2121,341,0,TYPE_EXPLOSION>
+	InjectableAmbientStarter<3,1,2056,431,0,TYPE_BALLE1>
+	InjectableAmbientStarter<3,1,2153,504,5,TYPE_NOVA2>
+	InjectableAmbientStarter<3,1,520,581,6,TYPE_STONECHIP>
+
+	; Twilight Gulch part 2: we can replace BB1_PLAT because Mister Stone doesn't throw those in this map
+	InjectableAmbientStarter<3,2,4665,507,0,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,2,1953,621,7,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,2,5593,772,7,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,2,6876,773,0,TYPE_BB1_PLAT>
+
+	; Hard Rocks part 3: we can replace BB1_PLAT because Mister Stone isn't in the map
+	InjectableAmbientStarter<3,5,802,34,0,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,5,0,383,5,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,5,429,383,6,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,5,275,713,0,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,5,135,833,0,TYPE_BB1_PLAT>
+	; No BB1_PLATs left, so steal one each of these five, and hope there aren't any noticeable consequences...
+	InjectableAmbientStarter<3,5,513,1223,5,TYPE_EXPLOSION>
+	InjectableAmbientStarter<3,5,749,2091,0,TYPE_BALLE1>
+	InjectableAmbientStarter<3,5,812,2090,0,TYPE_NOVA2>
+	InjectableAmbientStarter<3,5,874,2090,0,TYPE_STONECHIP>
+	InjectableAmbientStarter<3,5,939,2298,6,TYPE_PIEDS_RAYMAN>
+
+	; Mister Stone's Peaks part 4: we can replace BB1_PLAT because Mister Stone isn't in the map
+	InjectableAmbientStarter<3,9,3630,146,0,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,9,5073,259,6,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,9,7133,534,0,TYPE_BB1_PLAT>
+	InjectableAmbientStarter<3,9,2850,809,6,TYPE_BB1_PLAT>
+
+	; Eraser Plains part 1: I think we can replace EXPLOSION because, although there are loads of them, I can't think of anything in this map that actually uses them...
+	InjectableAmbientStarter<4,1,840,14,0,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,1,1640,107,8,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,1,3102,160,8,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,1,830,249,8,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,1,827,319,8,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,1,2382,304,0,TYPE_EXPLOSION>
+
+	; Space Mama's Crater part 2: I think we can replace EXPLOSION because, although there are loads of them, I can't think of anything in this map that actually uses them...
+	InjectableAmbientStarter<4,9,3968,3,8,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,9,2017,117,8,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,9,3251,156,0,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,9,3372,188,0,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,9,3250,232,0,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,9,3371,255,0,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,9,4368,309,0,TYPE_EXPLOSION>
+	InjectableAmbientStarter<4,9,4637,382,0,TYPE_EXPLOSION>
+	; No EXPLOSIONs left, so steal the unused "Rayman's feet" object
+	InjectableAmbientStarter<4,9,3520,508,8,TYPE_PIEDS_RAYMAN>
+
+	; Eat At Joe's part 2: steal one (of five) BALLE1s, and the unused "Rayman's feet" object
+	InjectableAmbientStarter<5,4,2926,43,0,TYPE_PIEDS_RAYMAN>
+	InjectableAmbientStarter<5,4,2068,401,10,TYPE_BALLE1>
+
+	; Eat At Joe's part 4: steal two (of five) NOVA2s, and the unused "Rayman's feet" object
+	InjectableAmbientStarter<5,6,974,121,10,TYPE_PIEDS_RAYMAN>
+	InjectableAmbientStarter<5,6,46,468,0,TYPE_NOVA2>
+	InjectableAmbientStarter<5,6,1225,450,10,TYPE_NOVA2>
+
+	; Mister Dark's Dare part 2: we can replace SPLASH because there is no water in the map
+	; Note that there are ten Ambient Starters in this map in the PS1 version, but mercifully, five of them also exist in the PC version!
+	; This means we only need to inject five more:
+	InjectableAmbientStarter<6,2,5064,192,0,TYPE_SPLASH>
+	InjectableAmbientStarter<6,2,5595,288,12,TYPE_SPLASH>
+	InjectableAmbientStarter<6,2,5596,363,12,TYPE_SPLASH>
+	InjectableAmbientStarter<6,2,2045,397,11,TYPE_SPLASH>
+	InjectableAmbientStarter<6,2,5491,397,12,TYPE_SPLASH>
+end_injection_table:
+
+midi_file_seg	dw 0	; Selector pointing at "MIDI" track data
+midi_file_hdl	dd ?	; Memory block handle for that segment
+midi_file_size	dd ?	; Size of that memory block
+midi_sample_idx	dd -1	; Sample index of currently-playing "MIDI" track
+midi_cur_track	dd -1	; Which "MIDI" track is currently playing
+; File path for "MIDI" track data - 80 is the max path length on DOS
+midi_file_path	db 80 dup (?)
 
 ; Error messages
 outofselectors	db 33o,"[35m","Error setting up selector(s).",13,10
@@ -2679,7 +3480,7 @@ set_hookpoint	proc near	uses ds eax
 
 	mov	ds,cs:[mydatasel]
 	assume	ds:payload
-	mov	hook_addxs[ecx*4],edx; set the address
+	mov	hook_addxs[ecx*4],edx	; set the address
 
 	call	hook_activate		; activate the new hookpoint!
 	ret
@@ -2708,6 +3509,12 @@ change_music	proc near
 	push	edx
 	push	ecx
 	push	ebx
+
+	; First, restore any music we changed, to avoid picking up the wrong "tra_to_restore"
+	mov	dl,al			; save the track number
+	xor	eax,eax			; "immediate" is OK since we'll be changing again anyway
+	call	restore_music
+	mov	al,dl			; get back the track number
 
 	mov	ecx,[pnum_world]
 	mov	edx,[pnum_level]
@@ -2755,6 +3562,37 @@ change_music	proc near
 	pop	edx
 	ret
 change_music	endp
+
+; void __fastcall restore_music(bool delayed);
+; Restores the music track (and corresponding length) for the current level if it's been changed
+restore_music	proc near
+	xor	ecx,ecx
+	cmp	[tra_to_restore],cl
+	jnz	@F
+	ret
+@@:
+	; It's been tampered with - reset
+	test	eax,eax
+	jnz	@@delayed_reset
+
+	; Immediately set cdTime to zero to signal the game to play the restored track
+	mov	eax,[pcdTime]
+	mov	es:[eax],ecx
+	jmp	@@reset_decided
+
+@@delayed_reset:
+	mov	[music_dirty],1		; set dirty flag so the restored track will play on level reentry
+
+@@reset_decided:
+	xchg	[tra_to_restore],cl
+	mov	eax,[ptra_to_restore]
+	mov	es:[eax],cl		; restore the default track number
+
+	mov	ecx,[len_to_restore]
+	mov	eax,[plen_to_restore]
+	mov	es:[eax],ecx		; restore the default track length
+	ret
+restore_music	endp
 
 ; =================================================
 ; == HANDLER for our hooking mechanism on int F5 ==
@@ -2808,6 +3646,24 @@ hook_handler	proc
 	cmp	eax,[pLevelEnd2]
 	je	@@no_longer_in_level
 
+	cmp	eax,[pStartVignette]
+	je	@@world_loading
+	cmp	eax,[pObjectsLoaded]
+	je	@@objects_loaded
+	cmp	eax,[pManageSndEvent]
+	je	@@manage_snd_event
+	cmp	eax,[pStartCDbbdead]
+	je	@@start_cd_bbdead
+	cmp	eax,[pStartFreezeSnd]
+	je	@@start_freeze_snd
+	cmp	eax,[pStopFreezeSnd]
+	je	@@stop_freeze_snd
+	cmp	eax,[pExitStopAllSnd]
+	je	@@exit_stop_all_snd
+
+	cmp	eax,[psosDIGIStop]
+	je	@@sos_digi_stop_sample_hooked
+
 	cmp	eax,[pDoGrowingPlat]
 	je	@@plant_growing
 	cmp	eax,[pMoskitoLock]
@@ -2815,7 +3671,7 @@ hook_handler	proc
 	cmp	eax,[pMoskitoFast]
 	je	@@moskito_ride_speedup
 	cmp	eax,[pMoskitoSlow]
-	je	@@no_longer_in_level	; restore default music
+	je	@@moskito_ride_slowdown
 
 	cmp	eax,[pExitSign1]
 	je	@@yay_fanfare
@@ -2823,6 +3679,17 @@ hook_handler	proc
 	je	@@yay_fanfare
 	cmp	eax,[pPerdu]
 	je	@@snif_dead
+	cmp	eax,[pSuspence]
+	je	@@start_cd_suspence
+
+	cmp	eax,[pExitSignEOA1]
+	je	@@eoa_check
+	cmp	eax,[pExitSignEOA2]
+	je	@@eoa_check
+	cmp	eax,[pExitSignEOA3]
+	je	@@eoa_check
+	cmp	eax,[pDoAnimFrozen]
+	je	@@freeze_check
 
 	cmp	eax,[pPlayIntro]
 	je	@@cutscene
@@ -2843,6 +3710,8 @@ hook_handler	proc
 
 ; Entering a level - restart the music if it's been tampered with...
 @@now_in_level:
+	call	stop_ambient_track
+
 	xor	ecx,ecx
 	cmp	[music_dirty],cl
 	jz	@@retpoint
@@ -2855,31 +3724,189 @@ hook_handler	proc
 
 ; Leaving a level - restore the default music track if needed, and mark as dirty.
 @@no_longer_in_level:
+	; EAX is non-zero so this will be a delayed reset
+	call	restore_music
+
+	; Also forget whatever "MIDI" track we're playing, as "stop_all_snd"
+	; has either just been called or will be called soon...
 	xor	ecx,ecx
-	cmp	[tra_to_restore],cl
-	jz	@@retpoint
+	dec	ecx
+	; Set these to -1 to indicate no ambient playing anymore
+	mov	[midi_sample_idx],ecx
+	mov	[midi_cur_track],ecx
+	jmp	@@retpoint
 
-	; It's been tampered with - reset
-	cmp	eax,[pMoskitoSlow]
-	jne	@@delayed_reset
+; The world-loading vignette is appearing on the screen.
+; Start the corresponding "MIDI" track...
+@@world_loading:
+	xor	al,al	; play the first track
+	call	play_ambient_track
+	jmp	@@retpoint
 
-	; Immediately set cdTime to zero to signal the game to play the restored track
-	mov	eax,[pcdTime]
-	mov	es:[eax],ecx
-	jmp	@@reset_decided
+; A level has finished loading - check if we need to inject one or more Ambient Starters...
+@@objects_loaded:
+	mov	ecx,[pnum_world]
+	mov	al,[es:ecx]
+	mov	ecx,[pnum_level]
+	mov	ah,[es:ecx]
 
-@@delayed_reset:
-	mov	[music_dirty],1		; set dirty flag so the restored track will play on level reentry
+	lea	ecx,injection_table
+@@check_injection:
+	; correct world/level pair?
+	cmp	word ptr [ecx].InjectableAmbientStarter.bWorld,ax
+	jne	@@next_injection
 
-@@reset_decided:
-	xchg	[tra_to_restore],cl
-	mov	eax,[ptra_to_restore]
-	mov	es:[eax],cl		; restore the default track number
+	push	ecx
+	push	edi
+	push	edx
+	push	esi
+	push	bx
 
-	mov	ecx,[len_to_restore]
-	mov	eax,[plen_to_restore]
-	mov	es:[eax],ecx		; restore the default track length
+	; BL --> hitpoints, BH --> object type to replace
+	mov	bx,word ptr [ecx].InjectableAmbientStarter.bHitPoints
+	; EDX --> X and Y position
+	mov	edx,dword ptr [ecx].InjectableAmbientStarter.wXPos
 
+	; Load the count and base of the object array
+	mov	edi,[plevel]
+	movzx	ecx,[es:edi].Rayman_LevelInfo.wObjCount
+	mov	edi,[es:edi].Rayman_LevelInfo.pObjBase
+
+@@obj_search_loop:
+	; If we find the PNG object, hold onto it so we can copy the first four pointers
+	cmp	[es:edi].Rayman_ObjData.ObjType,TYPE_POING
+	jne	@F
+	mov	esi,edi
+@@:
+	; Check if it's the type we want to replace
+	cmp	byte ptr [es:edi].Rayman_ObjData.ObjType,bh
+	lea	edi,[edi+size Rayman_ObjData]
+	loopne	@@obj_search_loop
+	jecxz	@F
+
+	; Go back to the object we were just looking at
+	sub	edi,size Rayman_ObjData
+	; Turn it into an Ambient Starter
+	mov	[es:edi].Rayman_ObjData.ObjType,TYPE_AUDIOSTART
+	; Values from https://github.com/BinarySerializer/Ray1Map/blob/659ba4e3d078de77324d2025f95115868df08eab/EventManifests/Events.csv#L95
+	mov	[es:edi].Rayman_ObjData.Etat,5
+	mov	[es:edi].Rayman_ObjData.InitialEtat,5
+	mov	[es:edi].Rayman_ObjData.SubEtat,65
+	mov	[es:edi].Rayman_ObjData.InitialSubEtat,65
+	mov	[es:edi].Rayman_ObjData.OffBX,64
+	mov	[es:edi].Rayman_ObjData.OffBY,64
+	mov	[es:edi].Rayman_ObjData.OffHY,64
+	mov	[es:edi].Rayman_ObjData.FollowSprite,0
+	mov	[es:edi].Rayman_ObjData.HitSprite,255
+
+	; For reference here is the hexdump of an Ambient Starter object in CAKE/RAY2.LEV of Rayman v1.21 US:
+	; 00070600                                             04 00  |................|
+	; 00070610  00 00 04 00 00 00 04 00  00 00 02 00 00 00 00 00  |................|
+	; 00070620  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+	; 00070630  00 00 00 00 00 00 8c 0e  00 00 75 00 00 00 00 00  |..........u.....|
+	; 00070640  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+	; 00070650  00 00 5c 00 00 00 00 00  00 00 00 00 00 00 00 00  |..\.............|
+	; 00070660  00 00 00 00 00 00 00 00  00 00 00 00 00 00 1e 00  |................|
+	; 00070670  00 00 00 00 00 00 40 40  00 00 41 05 00 00 00 00  |......@@..A.....|
+	; 00070680  00 00 40 00 0b 00 07 ff  00 00 00 00 00 00 3e 00  |..@...........>.|
+	; 00070690  00 00
+	; This tells us that PC_Flags needs to be zero:
+	mov	[es:edi].Rayman_ObjData.PC_Flags,0
+
+	; Most importantly, set the position to the desired value:
+	movsx	ecx,dx
+	mov	[es:edi].Rayman_ObjData.InitialXPosition,dx
+	mov	[es:edi].Rayman_ObjData.XPosition,ecx
+	sar	edx,10h	; get the Y position from the upper half
+	mov	[es:edi].Rayman_ObjData.InitialYPosition,dx
+	mov	[es:edi].Rayman_ObjData.YPosition,edx
+
+	; And the hitpoints:
+	mov	[es:edi].Rayman_ObjData.HitPoints,bl
+	mov	[es:edi].Rayman_ObjData.InitialHitPoints,bl
+
+	; Now copy the four pointers from the beginning of the PNG object to this one:
+	mov	ecx,4
+	rep	movs dword ptr [es:edi],[es:esi]
+	; Now ECX==0 and ES:EDI points at RuntimeCommandsPointer - nullify that:
+	mov	[es:edi],ecx
+	; Also nullify RuntimeLabelOffsetsPointer:
+	mov	[es:edi+4],ecx
+
+@@:	pop	bx
+	pop	esi
+	pop	edx
+	pop	edi
+	pop	ecx
+
+@@next_injection:
+	add	ecx,size InjectableAmbientStarter
+	cmp	ecx,offset end_injection_table
+	jb	@@check_injection
+	jmp	@@retpoint
+
+; Rayman's collided with an "Ambient Starter" - use its hitpoints to decide what track to play.
+; Or, if they're zero, then stop any ambient that's playing!
+@@manage_snd_event:
+	; Get the EAX value from the stack (it's the pointer to the Ambient Starter object)
+	mov	eax,[esp+4]
+	; Grab the hitpoints
+	mov	al,[es:eax].Rayman_ObjData.HitPoints
+	test	al,al
+	jz	@F
+	call	play_ambient_track
+	jmp	@@retpoint
+@@:
+	call	stop_ambient_track
+	jmp	@@retpoint
+
+; A boss has been defeated, and the game wants to start the menu music.
+; Play the MIDI "Victory" music instead!
+; TODO: Maybe this would sound better as a CD track? It would certainly simplify the code...
+; But as a CD track, the looping wouldn't be as seamless...
+@@start_cd_bbdead:
+	; Skip over the call to start_cd_rap (since we will be calling MSCDEX from inside this handler!)
+	add	dword ptr [ebp],5	; length of 32-bit near call instruction
+
+	pushad
+	; Stop currently-playing CD audio (this calls MSCDEX!)
+	mov	edi,[pStopCD]
+	call	call_code_in_rayman
+
+	; Set cdTime to -1 so the game doesn't try to restart CD audio
+	mov	edi,[pcdTime]
+	mov	dword ptr es:[edi],-1
+	popad
+
+	mov	al,AMBIENT_BBDEAD
+	call	play_ambient_track
+	jmp	@@retpoint
+
+; Game is being paused - stop the current ambient track!
+@@start_freeze_snd:
+	mov	eax,[midi_cur_track]
+	test	eax,eax
+	; negative means nothing playing
+	js	@@retpoint
+
+	call	stop_ambient_track
+	; put this back for the moment so that stop_freeze_snd knows what to restart!
+	mov	[midi_cur_track],eax
+	jmp	@@retpoint
+
+; Game is being resumed - restart any ambient track that got stopped!
+; TODO: It would be nice to resume exactly where it left off, but I'm not sure if any
+; mechanism for that exists within SOS, at least the version of it that Rayman uses...
+@@stop_freeze_snd:
+	xor	eax,eax
+	dec	eax
+	; set midi_cur_track to -1 to force play_ambient_track to restart it
+	xchg	eax,[midi_cur_track]
+
+	test	eax,eax
+	; negative means nothing playing
+	js	@@retpoint
+	call	play_ambient_track
 	jmp	@@retpoint
 
 ; Rayman's planted a seed - we should switch the music to Suspense if it's not already.
@@ -2918,46 +3945,99 @@ hook_handler	proc
 	call	change_music
 	jmp	@@retpoint
 
+; Rayman's riding a mosquito, who has just slowed down to normal speed - restore the music if necessary.
+@@moskito_ride_slowdown:
+	xor	eax,eax			; immediate reset
+	call	restore_music
+	jmp	@@retpoint
+
 ; Rayman's reached the exit sign! Play a CD audio track to celebrate, like the PS1 and Saturn versions.
-; TODO: Do we really want this? It's a nice idea in principle, but the game seems to stop the audio 
-; before it has a chance to finish... We could probably do more hooks to stop that...
 @@yay_fanfare:
-	; Check whether we're returning to the same or lower privilege level
-	mov	ax,cs
-	mov	cx,[ebp+4]
-	arpl	ax,cx
+	; Our fanfare management is scuppered in Candy Chateau, as the game doesn't bother freezing.
+	; So (for now anyway) just don't do it, to avoid potential complications...
+	mov	eax,[pnum_world]
+	cmp	byte ptr es:[eax],6
+	je	@@retpoint
 
-	; Before we diverge our paths, save a new return address in ECX.
-	; These "exit sign" hookpoints occur at a call (5bytes) to a null sub, which can be skipped over.
-	mov	ecx,[ebp]
-	lea	ecx,[ecx+5]
-
-	; We actually want to return directly to Rayman's function to play a CD audio track,
-	; and invoke it with track 29 (Rayman's victory fanfare).
-	mov	eax,[pPlayTrack]
-	mov	[ebp],eax
+	; Change music to track 29 (Rayman's victory fanfare).
 	mov	eax,29			; Yeah!
+	call	change_music
 	mov	[music_dirty],80h	; set fanfare flag
-	jz	@@fanfare_privileged	; ZF set/cleared by ARPL above
 
-	; OK, Rayman's at the same privilege level as us, so there's only one stack to worry about
-	mov	[ebp+8],ecx		; replace EFLAGS with new return address - now this is a RETF frame instead of IRET!
-	pop	ecx
-	add	esp,4			; skip EAX on the stack (it's set to our track number!)
-	pop	es
-	pop	ds
-	pop	ebp
-	retf
+	; Ensure it doesn't get interrupted
+	mov	eax,[pflagCDPlay]
+	mov	byte ptr es:[eax],0	; reset this so it only becomes non-zero when track ends...
+	jmp	@@retpoint
 
-@@fanfare_privileged:
-	; Returning to an outer privilege level, which means we're on a different stack.
-	sub	dword ptr [ebp+0Ch],4	; create a RETN frame on user-mode stack (user SS:ESP are at SS:EBP+0Ch)
-	lds	ebp,[ebp+0Ch]
-	assume	ds:nothing
-	mov	ds:[ebp],ecx		; put our new return address into this new stack frame
+; Rayman's successfully completed a level, so the game is about to call "stop_all_snd".
+; Make sure it DOESN'T stop the BBDEAD ambient track, if it's playing!
+; NOTE: Honestly, the implementation below was specifically conceived such that I wouldn't
+;	have to go hunting through the EXEs for even more pointers, because the issue it
+;	addresses was found in the middle of a playthrough, and I didn't have the energy
+;	to start that process again...
+@@exit_stop_all_snd:
+	cmp	[midi_cur_track],AMBIENT_BBDEAD
+	jne	@@retpoint
 
-	; Now return by the usual route, but make sure EAX is set to our track number
-	mov	[esp+4],eax
+	; set a *temporary* hookpoint on sosDIGIStopSample
+	push	edx
+	mov	edx,[psosDIGIStop]
+	call	set_hookpoint
+	; set a dummy hookpoint immediately after it so that they reactivate each other
+	add	edx,2
+	call	set_hookpoint
+	pop	edx
+	jmp	@@retpoint
+
+; sosDIGIStopSample has been called by stop_all_snd while the BBDEAD track is playing.
+; Make sure it doesn't stop the BBDEAD track itself!
+@@sos_digi_stop_sample_hooked:
+	cmp	edx,[midi_sample_idx]
+	jne	@@retpoint
+	; OK, it's trying to stop the "MIDI" track - negate the index so it fails!
+	not	edx
+	; Our work is done here, so delete this hookpoint (and the dummy one after it)
+	call	hook_find
+	call	clear_hookpoint
+	add	eax,2
+	call	hook_find
+	call	clear_hookpoint
+	jmp	@@retpoint
+
+; The game is frozen as Rayman's on an exit sign, and it's trying to decide whether or not to move to the next level.
+; It has just called "EOA" on Rayman, and AL is non-zero iff Rayman's "yeah" animation has finished playing.
+; We also want to zero AL if the CD audio of the fanfare is still playing!
+@@eoa_check:
+	test	[music_dirty],80h	; check fanfare flag
+	jz	@@retpoint
+
+	mov	eax,[pflagCDPlay]
+	mov	al,es:[eax]
+	test	al,al
+	; If it's non-zero, then that means the music track is finished and the frame counter has started to increment.
+	; That means we can allow the signpost code to continue as if EOA returned TRUE - so swap the return values!
+	xchg	al,[esp+4]
+	; If it wasn't zero, then all we need to do is reset the flags, below.
+	jnz	@@fanfare_done
+
+	; if we're here, it's still playing, so make sure the animation doesn't progress too far
+	test	al,al			; check if EOA returned TRUE
+	jz	@@retpoint
+	; if it did, then set an additional flag so that we freeze Rayman until the CD audio is done:
+	or	[music_dirty],40h
+	jmp	@@retpoint
+
+@@fanfare_done:
+	mov	[music_dirty],0		; unset fanfare flag
+	jmp	@@retpoint		; we're good, leave AL alone
+
+; The game is frozen on an exit sign, but it's asking Rayman's sprite to animate. Check whether or not to allow this.
+@@freeze_check:
+	test	[music_dirty],40h
+	jz	@@retpoint
+	; OK, Rayman's reached the end of his "yeah" animation, so freeze him until the CD audio finishes.
+	; We accomplish this by hopping over the call to "DO_ANIM":
+	add	dword ptr [ebp],5
 	jmp	@@retpoint
 
 ; Rayman is dead :( Play a CD audio track, like the PS1 and Saturn versions
@@ -2972,6 +4052,26 @@ hook_handler	proc
 	mov	[ebp],eax
 	mov	dword ptr [esp+4],30	; EAX --> Perdu
 	mov	[music_dirty],1		; set dirty flag to restart level music when Rayman respawns
+	; Ensure it doesn't get interrupted
+	mov	eax,[pcdTime]
+	mov	dword ptr es:[eax],-1	; wait forever before restarting music
+	; Also stop any ambient that's playing
+	call	stop_ambient_track
+	jmp	@@retpoint
+
+; "Mister Dark kidnaps Betilla" vignette is being shown - play the "Suspense" music
+@@start_cd_suspence:
+	; skip over the null sub call
+	add	dword ptr [ebp],5
+	; call into Rayman's code to play the suspense track
+	; (this calls MSCDEX so the hookpoint will reset)
+	pushad
+	mov	edi,[pPlayTrack]
+	mov	eax,32	; Suspense
+	call	call_code_in_rayman
+	popad
+	; Also stop any ambient that's playing
+	call	stop_ambient_track
 	jmp	@@retpoint
 
 ; game is about to play a cutscene - select the right music
@@ -3142,7 +4242,7 @@ openredir_9x	proc near
 openredir_9x	endp
 
 ; Return currently-running EXE in ES:DI
-get_cur_exe	proc near	uses ax bx cx
+get_cur_exe	proc far	uses ax bx cx
 	mov	ah,62h	; GET CURRENT PSP ADDRESS
 	int	21h
 
@@ -3424,7 +4524,7 @@ entry:
 	mov	si,81h	; command line in PSP
 	movzx	cx,byte ptr ds:[80h]
 	test	cx,cx
-	jz	@@freeenv
+	jz	@@getambientdat
 
 	cld
 @@:
@@ -3441,17 +4541,69 @@ entry:
 	or	byte ptr fs:[statusword],ah
 	loop	@B
 
-@@freeenv:
-	; free environment to save Conventional Memory
-	mov	es,ds:[2Ch]	; get env segment
+@@getambientdat:
+	; get_cur_exe will not work on DOS < 3.0
+	mov	ax,3000h; get DOS version
+	int	21h
+	cmp	al,3
+	jae	@F
 
+	mov     es,ds:[2Ch]     ; get env segment
+	mov	di,-1	; indicate to following code that we don't have a path
+	jmp	@@have_exe
+
+@@:	call	get_cur_exe
+@@have_exe:
+	push	es
+	pop	ds	; get env into DS
+	mov	si,di
+	; set up to copy to midi_file_path
+	mov	ax,seg midi_file_path
+	mov	es,ax
+	lea	di,midi_file_path
+
+	; the net effect is that if we're on DOS < 3.0, then we'll end up just
+	; looking for AMBIENTS.DAT in Rayman's folder instead of the TSR's...
+	cmp	si,-1
+	je	@@justcopy
+
+	cld
+@@:	; just copy the EXE path until we reach the null terminator
+	lodsb
+	test	al,al	; null terminator?
+	stosb
+	jnz	@B
+
+	; now scan back to find the last '\' in the path
+	dec	di
+	mov	cx,di
+	lea	ax,midi_file_path
+	sub	cx,ax	; set CX so we don't run backwards off the beginning of the path field!
+	mov	al,'\'
+	std	; scan backwards!
+	repne	scasb
+	; position ourselves *after* the '\'
+	lea	di,[di+2]
+
+@@justcopy:
+	; now copy the actual filename to the end of the path
+	cld	; copy forwards!
+	mov	cx,size_midi_fn
+	lea	si,midi_file_name
+	rep	movs byte ptr es:[di],cs:[si]
+
+	; put the env seg back in ES so we can free it
+	push	ds
+	pop	es
 	push	cs
 	pop	ds
 	assume	ds:init
+
 	mov	dx,offset intro
 	mov	ah,9	; write to stdout
 	int	21h
 
+	; free environment to save Conventional Memory
 	mov	ah,49h	; free memory
 	int	21h
 	jnc	@F
@@ -3625,6 +4777,10 @@ entry:
 	int	21h
 	mov	ax,4CFFh; EXIT with status FFh
 	int	21h
+
+; File name for "MIDI" track data
+midi_file_name	db "AMBIENTS.DAT",0
+size_midi_fn	equ $-midi_file_name
 
 messages:
 no386		db "Looks like you're trying to run this on an 80(2)86. Aborting...",0Dh,0Ah,"$"

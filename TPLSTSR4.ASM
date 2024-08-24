@@ -3368,10 +3368,13 @@ callback_fromstub proc
 	mov	ds,cs:[mydatasel]
 	assume	ds:payload
 
-	movzx	ecx,[cur_trig_hook]
+	xor	ecx,ecx
+	dec	cx
+	xchg	cx,[cur_trig_hook]
+	cmp	cx,-1
+	je	@F
 	call	hook_activate
-	mov	[cur_trig_hook],-1
-
+@@:
 	call	get_stub_seg
 	assume	gs:stub
 	; send it back to the int 2F handler
@@ -3391,6 +3394,8 @@ hook_active	endp
 ; void hook_activate(int idx@<ecx>);
 ; Activates the idx-th hookpoint if it's inactive.
 hook_activate	proc near
+	cmp	ecx,NUM_HOOKS
+	ja	@F	; Don't attempt to check / activate an invalid hook!
 	call	hook_active
 	jnz	@F
 	push	eax
@@ -3403,6 +3408,8 @@ hook_activate	endp
 ; void hook_deactivate(int idx@<ecx>);
 ; Dectivates the idx-th hookpoint if it's active.
 hook_deactivate	proc near
+	cmp	ecx,NUM_HOOKS
+	ja	@F	; Don't attempt to check / deactivate an invalid hook!
 	call	hook_active
 	jz	@F
 	push	eax
@@ -3439,13 +3446,17 @@ hook_swapcode	proc near	uses ds ebx edx
 	mov	edx,cs:hook_addxs[ecx*4]
 	mov	ebx,2			; poke a word
 
+	; is it a NULL hookpoint?
+	test	edx,edx
+	jz	@F
+
 	call	poketext
 	mov	ds,cs:[mydatasel]
 	assume	ds:payload
 	mov	hook_origcode[ecx*2],ax		; store the word we just replaced
 
+@@:	assume	ds:nothing
 	ret
-	assume	ds:nothing
 hook_swapcode	endp
 
 ; int __fastcall poketext(int data, void *addx, unsigned char size)
@@ -3475,6 +3486,11 @@ poketext	endp
 ; int set_hookpoint@<ecx>(void *addx@<edx>)
 ; Sets a hookpoint for *execution* at the given addx in Rayman's *code* segment.
 set_hookpoint	proc near	uses ds eax
+	mov	eax,edx
+	call	hook_find		; make sure it's not already hooked
+	test	ecx,ecx
+	jns	@F			; if it's non-negative, hook already exists
+
 	xor	eax,eax
 	call	hook_find		; find a null hookpoint
 
@@ -3483,7 +3499,7 @@ set_hookpoint	proc near	uses ds eax
 	mov	hook_addxs[ecx*4],edx	; set the address
 
 	call	hook_activate		; activate the new hookpoint!
-	ret
+@@:	ret
 
 	assume	ds:nothing
 set_hookpoint	endp
@@ -3496,7 +3512,12 @@ clear_hookpoint	proc near	uses ds
 	assume	ds:payload
 	mov	hook_addxs[ecx*4],0
 
-	ret
+	; Make sure nothing attempts to reactivate this hookpoint!
+	cmp	cx,[cur_trig_hook]
+	jne	@F
+	mov	[cur_trig_hook],-1
+
+@@:	ret
 	assume	ds:nothing
 clear_hookpoint	endp
 

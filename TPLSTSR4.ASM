@@ -3249,6 +3249,9 @@ rayman_cs	dw ?	; Rayman's code segment
 rayman_cs_asds	dw 0	; Rayman's code segment as a data segment, for poking!
 rayman_ds	dw ?
 
+FANFARE_MAXFRAMES	equ 480 ; Allow up to 480 frames of frozen Rayman during the fanfare (same as PS1 version)
+fanfare_countdown	dw ?	; Frames left before we force the fanfare to terminate
+
 align	4
 callback_RMCS	rmcall <?>
 
@@ -3982,6 +3985,9 @@ hook_handler	proc
 	cmp	byte ptr es:[eax],6
 	je	@@retpoint
 
+	; Reset the countdown
+	mov	[fanfare_countdown],FANFARE_MAXFRAMES
+
 	; Change music to track 29 (Rayman's victory fanfare).
 	mov	eax,29			; Yeah!
 	call	change_music
@@ -4056,6 +4062,12 @@ hook_handler	proc
 
 	mov	eax,[pflagCDPlay]
 	mov	al,es:[eax]
+	; Check if the countdown has reached zero
+	cmp	[fanfare_countdown],0
+	jnz	@F
+	; force EOA check to return true:
+	mov	al,1
+@@:
 	test	al,al
 	; If it's non-zero, then that means the music track is finished and the frame counter has started to increment.
 	; That means we can allow the signpost code to continue as if EOA returned TRUE - so swap the return values!
@@ -4081,6 +4093,9 @@ hook_handler	proc
 	; OK, Rayman's reached the end of his "yeah" animation, so freeze him until the CD audio finishes.
 	; We accomplish this by hopping over the call to "DO_ANIM":
 	add	dword ptr [ebp],5
+	; Put a cap of 480 frames on this frozen state like the PS1 version. This means the user won't have
+	; to wait for ages if they use the wrong CD, or if something else goes wrong with CD audio...
+	dec	[fanfare_countdown]
 	jmp	@@retpoint
 
 ; Rayman is dead :( Play a CD audio track, like the PS1 and Saturn versions

@@ -1299,6 +1299,9 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA3],(5FEC5h-81216h)	; @ 0x5FEC5
 	mov	gs:[pDoAnimFrozen],(59085h-81216h)	; @ 0x59085
 	mov	gs:[pSuspence],(6878Ch-81216h)		; @ 0x6878C
+	mov	gs:[pBRayThrowFist],(2E6EFh-81216h)	; @ 0x2E6EF
+	mov	gs:[pBRayFinFist],(2E749h-81216h)	; @ 0x2E749
+	mov	gs:[padd_alwobj],(1D4D4h-81216h)	; @ 0x1D4D4
 
 	jmp	@@payload_fixedup
 
@@ -2696,6 +2699,12 @@ setup_hooks	proc near	uses ecx edx
 	mov	edx,[pDoAnimFrozen]
 	call	set_hookpoint
 
+	; Hooks to fix visual bugs in the PC version (TODO: make optional)
+	mov	edx,[pBRayThrowFist]
+	call	set_hookpoint
+	mov	edx,[pBRayFinFist]	; complementary hookpoint to reactivate the other
+	call	set_hookpoint
+
 	; Hooks to select the language-appropriate cutscene music
 	mov	edx,[pPlayIntro]
 	test	edx,edx
@@ -3215,6 +3224,9 @@ pExitSignEOA2	dd ?	;; We need it to believe the answer is "NO" at least until ou
 pExitSignEOA3	dd ?	;; audio is finished playing!
 pDoAnimFrozen	dd ?	; Call to "DO_ANIM" on Rayman while game is otherwise frozen on exit sign
 pSuspence	dd ?	; Call to null sub from "INIT_VIGNET", which should start Suspense music
+pBRayThrowFist	dd ?	; Bad Rayman's fist is being made active (if not already)
+pBRayFinFist	dd ?	; Bad Rayman's fist is being made inactive (if not already)
+padd_alwobj	dd ?	; Function in Rayman's code to add an "always" object to the active table
 end_textptrs:
 
 ; Pointers to data in Rayman
@@ -3725,6 +3737,9 @@ hook_handler	proc
 	cmp	eax,[pCutsceneRead]
 	je	@@cutscene_read
 
+	cmp	eax,[pBRayThrowFist]
+	je	@@badray_throwfist
+
 	; Dunno what hookpoint that was then...
 @@retpoint:
 	pop	ecx
@@ -4130,6 +4145,22 @@ hook_handler	proc
 	popad
 	; Also stop any ambient that's playing
 	call	stop_ambient_track
+	jmp	@@retpoint
+
+; Bad Rayman's fist should be active - check if "add_alwobj" needs to be called
+@@badray_throwfist:
+	; At this point, the interrupted code's registers include:
+	; * pointer to Bad Rayman's fist in ECX
+	; * the fist's PC_Flags in AH
+	; (inconveniently, both of those are on our stack rather than in regs!)
+	test	byte ptr [esp+5],4	; does AH include 4, the IsAlive flag?
+	jnz	@@retpoint		; yes, already active, no action needed
+
+	mov	eax,[esp]	; ECX value of interrupted code
+	push	edi
+	mov	edi,[padd_alwobj]
+	call	call_code_in_rayman
+	pop	edi
 	jmp	@@retpoint
 
 ; game is about to play a cutscene - select the right music

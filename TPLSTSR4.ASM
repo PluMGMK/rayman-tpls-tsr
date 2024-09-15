@@ -1302,6 +1302,8 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pBRayThrowFist],(2E6EFh-81216h)	; @ 0x2E6EF
 	mov	gs:[pBRayFinFist],(2E749h-81216h)	; @ 0x2E749
 	mov	gs:[padd_alwobj],(1D4D4h-81216h)	; @ 0x1D4D4
+	mov	gs:[pStarDerActive],(58AAEh-81216h)	; @ 0x58AAE
+	mov	gs:[pStarDevActive],(58ACCh-81216h)	; @ 0x58ACC
 
 	jmp	@@payload_fixedup
 
@@ -2351,6 +2353,7 @@ payload	segment use32
 	; (i.e. long after the CD init code is over and done with)
 	call	setup_tracklens
 	call	setup_hooks
+	call	fix_curse_stars
 
 @@passthrough:
 	pop	gs
@@ -2743,15 +2746,56 @@ setup_hooks	proc near	uses ecx edx
 	ret
 setup_hooks	endp
 
+; Nop out the instructions that mess up curse stars on PC.
+; A bit of explanation: the function RAY_REVERSE_COMMANDS forces the IsActive
+; field on the two curse star objects to 1 (i.e. True). On PlayStation, this
+; was sufficient to make them appear, but PC does some extra book-keeping, 
+; and so requires calling the function add_alwobj on those objects for the
+; engine to acknowledge their existence. The thing is, DO_RAYMAN does indeed
+; call add_alwobj on these objects, *but only* if their IsActive == 0 (False).
+; Of course, this condition is *never satisfied*, since RAY_REVERSE_COMMANDS
+; has already forced the value to True!
+; What we do here is prevent RAY_REVERSE_COMMANDS from setting IsActive to 1,
+; which then allows DO_RAYMAN to do the correct book-keeping, and the stars
+; to appear at the appropriate time. :)
+fix_curse_stars	proc near	uses eax edx ebx
+	; Here we change the instruction at pStarDerActive:
+	;	mov	dword ptr [ebx+24h],1
+	; to the harmless sequence:
+	;	xchg	ax,ax
+	;	mov	ecx,1
+	; ("Harmless" since ECX gets reused immediately after for something else)
+	mov	edx,[pStarDerActive]
+	mov	ebx,2		; poke a word
+	mov	ax,9066h	; 66h 90h == two-byte nop instruction
+	call	poketext
+	lea	edx,[edx+2]	; move past the word we poked
+	mov	ebx,1		; poke a byte
+	mov	al,0B9h		; B9h == mov ecx,<imm32>
+	call	poketext
+	; Now do the same thing at pStarDevActive (except
+	; what we're replacing is edx+24h instead of ebx)
+	mov	edx,[pStarDevActive]
+	mov	ebx,2		; poke a word
+	mov	ax,9066h	; 66h 90h == two-byte nop instruction
+	call	poketext
+	lea	edx,[edx+2]	; move past the word we poked
+	mov	ebx,1		; poke a byte
+	mov	al,0B9h		; B9h == mov ecx,<imm32>
+	call	poketext
+
+	ret
+fix_curse_stars	endp
+
 ; Get the stub segment into GS
 ; CF clear on success, set on failure
 ; Sets it up if it isn't already there - in this case, DS must point to payload!
 get_stub_seg	proc near	uses ax ebx ecx edx
 	mov	ax,cs:[stub_selector]
-	test	ax,ax		; clears CF
+	test	ax,ax	; clears CF
 	jnz	@@ok
 
-	mov	ax,2		; segment to selector
+	mov	ax,2	; segment to selector
 	mov	bx,stub
 	int	31h
 	jnc	@F
@@ -3227,6 +3271,8 @@ pSuspence	dd ?	; Call to null sub from "INIT_VIGNET", which should start Suspens
 pBRayThrowFist	dd ?	; Bad Rayman's fist is being made active (if not already)
 pBRayFinFist	dd ?	; Bad Rayman's fist is being made inactive (if not already)
 padd_alwobj	dd ?	; Function in Rayman's code to add an "always" object to the active table
+pStarDerActive	dd ?	; IsActive set to 1 on star_ray_der (to be nopped out)
+pStarDevActive	dd ?	; IsActive set to 1 on star_ray_dev (to be nopped out)
 end_textptrs:
 
 ; Pointers to data in Rayman

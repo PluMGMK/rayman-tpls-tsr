@@ -1263,6 +1263,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pdwDETDriverIndex],(181818h-137634h); @ 0x181818
 	mov	gs:[plevel],(16DA90h-137634h)		; @ 0x16DA90
 	mov	gs:[pflagCDPlay],(138F48h-137634h)	; @ 0x138F48
+	mov	gs:[pgele],(1706F6h-137634h)		; @ 0x1706F6
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x81216 in this version
@@ -1300,7 +1301,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pDoAnimFrozen],(59085h-81216h)	; @ 0x59085
 	mov	gs:[pSuspence],(6878Ch-81216h)		; @ 0x6878C
 	mov	gs:[pBRayThrowFist],(2E6EFh-81216h)	; @ 0x2E6EF
-	mov	gs:[pBRayFinFist],(2E749h-81216h)	; @ 0x2E749
+	mov	gs:[pBRayCommand],(2E4B8h-81216h)	; @ 0x2E4B8
 	mov	gs:[padd_alwobj],(1D4D4h-81216h)	; @ 0x1D4D4
 	mov	gs:[pStarDerActive],(58AAEh-81216h)	; @ 0x58AAE
 	mov	gs:[pStarDevActive],(58ACCh-81216h)	; @ 0x58ACC
@@ -2704,10 +2705,13 @@ setup_hooks	proc near	uses ecx edx
 	mov	edx,[pDoAnimFrozen]
 	call	set_hookpoint
 
+	; Hook Bad Rayman's command function to ensure we have an up-to-date pointer to him.
+	; This also guarantees that the "throw fist" hookpoint below is active when it's reached!
+	mov	edx,[pBRayCommand]
+	call	set_hookpoint
+
 	; Hooks to fix visual bugs in the PC version (TODO: make optional)
 	mov	edx,[pBRayThrowFist]
-	call	set_hookpoint
-	mov	edx,[pBRayFinFist]	; complementary hookpoint to reactivate the other
 	call	set_hookpoint
 	mov	edx,[pStarDerAddAlw]
 	call	set_hookpoint
@@ -3275,7 +3279,7 @@ pExitSignEOA3	dd ?	;; audio is finished playing!
 pDoAnimFrozen	dd ?	; Call to "DO_ANIM" on Rayman while game is otherwise frozen on exit sign
 pSuspence	dd ?	; Call to null sub from "INIT_VIGNET", which should start Suspense music
 pBRayThrowFist	dd ?	; Bad Rayman's fist is being made active (if not already)
-pBRayFinFist	dd ?	; Bad Rayman's fist is being made inactive (if not already)
+pBRayCommand	dd ?	; Bad Rayman's command code (runs every frame)
 padd_alwobj	dd ?	; Function in Rayman's code to add an "always" object to the active table
 pStarDerActive	dd ?	; IsActive set to 1 on star_ray_der (to be nopped out)
 pStarDevActive	dd ?	; IsActive set to 1 on star_ray_dev (to be nopped out)
@@ -3300,7 +3304,10 @@ plang		dd ?
 pdwDETDriverIndex dd ?	; Pointer to Rayman's SOS driver index
 plevel		dd ?	; Pointer to level info
 pflagCDPlay	dd ?	; Frame counter from when CD track ends to when it starts again (four frames)
+pgele		dd ?	; Pointer to Rayman engine "frozen" flag
 end_dataptrs:
+
+pBadRayman	dd 0	; Pointer to Bad Rayman's object data (runtime)
 
 ; Track on-the-fly music tampering
 plen_to_restore	dd ?
@@ -3452,6 +3459,17 @@ callback_fromstub proc
 	iretd
 	assume	ds:nothing,gs:nothing
 callback_fromstub endp
+
+; bool badray_active();
+; ZF clear if Bad Rayman is active, set if inactive
+; NOTE: ES needs to be set to Rayman's DS!
+badray_active	proc near
+	mov	eax,[pBadRayman]
+	test	eax,eax
+	jz	@F
+	cmp	es:[eax].Rayman_ObjData.IsActive,0
+@@:	ret
+badray_active	endp
 
 ; bool hook_active(int idx@<ecx>);
 ; ZF clear if hookpoint is active, set if inactive
@@ -3793,6 +3811,8 @@ hook_handler	proc
 
 	cmp	eax,[pBRayThrowFist]
 	je	@@badray_throwfist
+	cmp	eax,[pBRayCommand]
+	je	@@badray_command
 
 	cmp	eax,[pStarDevAddAlw]
 	je	@@star_dev_add_alwobj
@@ -3827,9 +3847,12 @@ hook_handler	proc
 	; EAX is non-zero so this will be a delayed reset
 	call	restore_music
 
+	; Reset Bad Rayman pointer
+	xor	ecx,ecx
+	mov	[pBadRayman],ecx
+
 	; Also forget whatever "MIDI" track we're playing, as "stop_all_snd"
 	; has either just been called or will be called soon...
-	xor	ecx,ecx
 	dec	ecx
 	; Set these to -1 to indicate no ambient playing anymore
 	mov	[midi_sample_idx],ecx
@@ -4053,12 +4076,6 @@ hook_handler	proc
 
 ; Rayman's reached the exit sign! Play a CD audio track to celebrate, like the PS1 and Saturn versions.
 @@yay_fanfare:
-	; Our fanfare management is scuppered in Candy Chateau, as the game doesn't bother freezing.
-	; So (for now anyway) just don't do it, to avoid potential complications...
-	mov	eax,[pnum_world]
-	cmp	byte ptr es:[eax],6
-	je	@@retpoint
-
 	; Reset the countdown
 	mov	[fanfare_countdown],FANFARE_MAXFRAMES
 
@@ -4134,6 +4151,17 @@ hook_handler	proc
 	test	[music_dirty],80h	; check fanfare flag
 	jz	@@retpoint
 
+	; Check if the game is frozen
+	mov	ecx,[pgele]
+	mov	al,es:[ecx]
+	cmp	al,2
+	je	@F
+	; If the game's not frozen we're probably waiting for Bad Rayman to die
+	call	badray_active
+	jnz	@F			; keep waiting...
+	mov	byte ptr es:[ecx],2	; set to "frozen for exit sign" :)
+
+@@:
 	mov	eax,[pflagCDPlay]
 	mov	al,es:[eax]
 	; Check if the countdown has reached zero
@@ -4220,6 +4248,12 @@ hook_handler	proc
 	mov	edi,[padd_alwobj]
 	call	call_code_in_rayman
 	pop	edi
+	jmp	@@retpoint
+
+; Bad Rayman's object code is running - his pointer is in EAX, capture it!
+@@badray_command:
+	mov	eax,[esp+4]
+	mov	[pBadRayman],eax
 	jmp	@@retpoint
 
 ; DO_RAYMAN is calling add_alwobj on a curse star object - ensure it's alive!

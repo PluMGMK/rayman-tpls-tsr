@@ -232,8 +232,8 @@ Rayman_ObjData struc
 	DisplayPrio		db ?
 	Timer			db ?
 	AnimationsCount		db ?
-	PC_Flags		dw ?
-				db ? ; padding
+	PC_Flags		db ?
+				dw ? ; padding
 Rayman_ObjData ends
 .errnz	size Rayman_ObjData - 84h
 
@@ -1304,6 +1304,8 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[padd_alwobj],(1D4D4h-81216h)	; @ 0x1D4D4
 	mov	gs:[pStarDerActive],(58AAEh-81216h)	; @ 0x58AAE
 	mov	gs:[pStarDevActive],(58ACCh-81216h)	; @ 0x58ACC
+	mov	gs:[pStarDerAddAlw],(6ED41h-81216h)	; @ 0x6ED41
+	mov	gs:[pStarDevAddAlw],(6ED2Dh-81216h)	; @ 0x6ED2D
 
 	jmp	@@payload_fixedup
 
@@ -2707,6 +2709,10 @@ setup_hooks	proc near	uses ecx edx
 	call	set_hookpoint
 	mov	edx,[pBRayFinFist]	; complementary hookpoint to reactivate the other
 	call	set_hookpoint
+	mov	edx,[pStarDerAddAlw]
+	call	set_hookpoint
+	mov	edx,[pStarDevAddAlw]
+	call	set_hookpoint
 
 	; Hooks to select the language-appropriate cutscene music
 	mov	edx,[pPlayIntro]
@@ -3273,6 +3279,8 @@ pBRayFinFist	dd ?	; Bad Rayman's fist is being made inactive (if not already)
 padd_alwobj	dd ?	; Function in Rayman's code to add an "always" object to the active table
 pStarDerActive	dd ?	; IsActive set to 1 on star_ray_der (to be nopped out)
 pStarDevActive	dd ?	; IsActive set to 1 on star_ray_dev (to be nopped out)
+pStarDerAddAlw	dd ?	; add_alwobj called on star_ray_der
+pStarDevAddAlw	dd ?	; add_alwobj called on star_ray_dev
 end_textptrs:
 
 ; Pointers to data in Rayman
@@ -3786,6 +3794,11 @@ hook_handler	proc
 	cmp	eax,[pBRayThrowFist]
 	je	@@badray_throwfist
 
+	cmp	eax,[pStarDevAddAlw]
+	je	@@star_dev_add_alwobj
+	cmp	eax,[pStarDerAddAlw]
+	je	@@star_der_add_alwobj
+
 	; Dunno what hookpoint that was then...
 @@retpoint:
 	pop	ecx
@@ -4207,6 +4220,23 @@ hook_handler	proc
 	mov	edi,[padd_alwobj]
 	call	call_code_in_rayman
 	pop	edi
+	jmp	@@retpoint
+
+; DO_RAYMAN is calling add_alwobj on a curse star object - ensure it's alive!
+@@star_dev_add_alwobj:
+	mov	cl,3
+	jmp	@F
+@@star_der_add_alwobj:
+	mov	cl,1
+@@:	; fetch the pointer from the stack
+	mov	eax,[esp+4]
+	mov	ch,es:[eax].Rayman_ObjData.PC_Flags
+	test	ch,4			; check IsAlive flag
+	jnz	@@retpoint
+	; go ahead and set the IsAlive flag and fix the DisplayPrio
+	or	ch,4
+	mov	es:[eax].Rayman_ObjData.PC_Flags,ch
+	mov	es:[eax].Rayman_ObjData.DisplayPrio,cl
 	jmp	@@retpoint
 
 ; game is about to play a cutscene - select the right music

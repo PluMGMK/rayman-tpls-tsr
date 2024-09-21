@@ -1264,6 +1264,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[plevel],(16DA90h-137634h)		; @ 0x16DA90
 	mov	gs:[pflagCDPlay],(138F48h-137634h)	; @ 0x138F48
 	mov	gs:[pgele],(1706F6h-137634h)		; @ 0x1706F6
+	mov	gs:[pMusicCdActive],(1706E6h-137634h)	; @ 0x1706E6
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x81216 in this version
@@ -2978,14 +2979,18 @@ play_ambient_track	proc near	uses es
 	mov	esi,es:[eax*8+8]
 	mov	edx,es:[eax*8+0Ch]
 
+	; Both stop_ambient_track and music_active require this:
+	mov	es,[rayman_ds]
 	; Already playing this track?
 	cmp	[midi_cur_track],eax
 	je	@F
 	; Otherwise, if we're already playing a track, stop it...
 	call	stop_ambient_track	; preserves EAX
-
 	; Remember which track we're playing
 	mov	[midi_cur_track],eax
+	; Only play if user has enabled music
+	call	music_active
+	jz	@F
 
 	sub	esp,size _SOS_START_SAMPLE
 	push	ss
@@ -3022,7 +3027,6 @@ play_ambient_track	proc near	uses es
 	mov	ecx,ss		; segment of lpStartSample
 	mov	ebx,esp		; offset of lpStartSample
 	mov	eax,[pdwDETDriverIndex]
-	mov	es,[rayman_ds]
 	mov	eax,es:[eax]	; int drvindex
 
 	call	sosDIGIStartSample
@@ -3034,7 +3038,13 @@ play_ambient_track	proc near	uses es
 	ret
 play_ambient_track	endp
 
+; NOTE: ES needs to be set to Rayman's DS!
 stop_ambient_track	proc near
+	; If Music is off, then midi_sample_idx could be stale,
+	; so always skip in that case:
+	call	music_active
+	jz	@F
+
 	mov	ecx,[midi_sample_idx]
 	test	cx,cx
 	js	@F	; skip if negative
@@ -3305,6 +3315,7 @@ pdwDETDriverIndex dd ?	; Pointer to Rayman's SOS driver index
 plevel		dd ?	; Pointer to level info
 pflagCDPlay	dd ?	; Frame counter from when CD track ends to when it starts again (four frames)
 pgele		dd ?	; Pointer to Rayman engine "frozen" flag
+pMusicCdActive	dd ?
 end_dataptrs:
 
 pBadRayman	dd 0	; Pointer to Bad Rayman's object data (runtime)
@@ -3459,6 +3470,16 @@ callback_fromstub proc
 	iretd
 	assume	ds:nothing,gs:nothing
 callback_fromstub endp
+
+; bool music_active();
+; ZF clear if Music is turned on in the game, set if turned off
+; NOTE: ES needs to be set to Rayman's DS!
+; Destroys ECX
+music_active	proc near
+	mov	ecx,[pMusicCdActive]
+	cmp	byte ptr es:[ecx],0
+	ret
+music_active	endp
 
 ; bool badray_active();
 ; ZF clear if Bad Rayman is active, set if inactive
@@ -3862,7 +3883,7 @@ hook_handler	proc
 ; The world-loading vignette is appearing on the screen.
 ; Start the corresponding "MIDI" track...
 @@world_loading:
-	xor	al,al	; play the first track
+	xor	al,al		; play the first track
 	call	play_ambient_track
 	jmp	@@retpoint
 
@@ -3988,9 +4009,11 @@ hook_handler	proc
 ; TODO: Maybe this would sound better as a CD track? It would certainly simplify the code...
 ; But as a CD track, the looping wouldn't be as seamless...
 @@start_cd_bbdead:
+	call	music_active
+	jz	@@retpoint		; don't play if Music is turned off
+
 	; Skip over the call to start_cd_rap (since we will be calling MSCDEX from inside this handler!)
 	add	dword ptr [ebp],5	; length of 32-bit near call instruction
-
 	pushad
 	; Stop currently-playing CD audio (this calls MSCDEX!)
 	mov	edi,[pStopCD]
@@ -4076,6 +4099,9 @@ hook_handler	proc
 
 ; Rayman's reached the exit sign! Play a CD audio track to celebrate, like the PS1 and Saturn versions.
 @@yay_fanfare:
+	call	music_active
+	jz	@@retpoint		; don't play if Music is turned off
+
 	; Reset the countdown
 	mov	[fanfare_countdown],FANFARE_MAXFRAMES
 
@@ -4202,7 +4228,9 @@ hook_handler	proc
 
 ; Rayman is dead :( Play a CD audio track, like the PS1 and Saturn versions
 @@snif_dead:
-	assume	ds:payload
+	call	music_active
+	jz	@@retpoint		; don't play if Music is turned off
+
 	; We want to return directly to Rayman's function to play a CD audio track,
 	; and invoke it with track 30 (Rayman's death cries).
 	; Unlike for the fanfare, there's no need to mess with stacks.
@@ -4221,6 +4249,9 @@ hook_handler	proc
 
 ; "Mister Dark kidnaps Betilla" vignette is being shown - play the "Suspense" music
 @@start_cd_suspence:
+	call	music_active
+	jz	@@retpoint		; don't play if Music is turned off
+
 	; skip over the null sub call
 	add	dword ptr [ebp],5
 	; call into Rayman's code to play the suspense track

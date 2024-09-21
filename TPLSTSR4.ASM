@@ -1245,10 +1245,10 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pBRayThrowFist],(2E80Fh-81CA8h)	; @ 0x2E80F
 	mov	gs:[pBRayCommand],(2E5D8h-81CA8h)	; @ 0x2E5D8
 	mov	gs:[padd_alwobj],(1D604h-81CA8h)	; @ 0x1D604
-	mov	gs:[pStarDerActive],(58C3Eh-81CA8h)	; @ 0x58C3E
-	mov	gs:[pStarDevActive],(58C5Ch-81CA8h)	; @ 0x58C5C
-	mov	gs:[pStarDerAddAlw],(6F7F1h-81CA8h)	; @ 0x6F7F1
+	mov	gs:[pStarDevActive],(58C3Eh-81CA8h)	; @ 0x58C3E
+	mov	gs:[pStarDerActive],(58C5Ch-81CA8h)	; @ 0x58C5C
 	mov	gs:[pStarDevAddAlw],(6F7DDh-81CA8h)	; @ 0x6F7DD
+	mov	gs:[pStarDerAddAlw],(6F7F1h-81CA8h)	; @ 0x6F7F1
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -1313,10 +1313,10 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pBRayThrowFist],(2E6EFh-81216h)	; @ 0x2E6EF
 	mov	gs:[pBRayCommand],(2E4B8h-81216h)	; @ 0x2E4B8
 	mov	gs:[padd_alwobj],(1D4D4h-81216h)	; @ 0x1D4D4
-	mov	gs:[pStarDerActive],(58AAEh-81216h)	; @ 0x58AAE
-	mov	gs:[pStarDevActive],(58ACCh-81216h)	; @ 0x58ACC
-	mov	gs:[pStarDerAddAlw],(6ED41h-81216h)	; @ 0x6ED41
+	mov	gs:[pStarDevActive],(58AAEh-81216h)	; @ 0x58AAE
+	mov	gs:[pStarDerActive],(58ACCh-81216h)	; @ 0x58ACC
 	mov	gs:[pStarDevAddAlw],(6ED2Dh-81216h)	; @ 0x6ED2D
+	mov	gs:[pStarDerAddAlw],(6ED41h-81216h)	; @ 0x6ED41
 
 	jmp	@@payload_fixedup
 
@@ -1335,10 +1335,12 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	; mov	gs:[phighest_atrack],(17F7B2h-137624h)	; @ 0x17F7B2
 	; mov	gs:[pcd_driveletter],(17090Bh-137624h)	; @ 0x17090B
 	mov	gs:[plang],(170918h-137624h)		; @ 0x170918
-	; these three are copied from v1.12 US above (same displacements):
+	; these five are copied from v1.12 US above (same displacements):
 	mov	gs:[pdwDETDriverIndex],(181A78h-137634h); @ 0x181A68
 	mov	gs:[plevel],(16DCF0h-137634h)		; @ 0x16DCE0
 	mov	gs:[pflagCDPlay],(138FA8h-137634h)	; @ 0x138F98
+	mov	gs:[pgele],(170956h-137634h)		; @ 0x170946
+	mov	gs:[pMusicCdActive],(170946h-137634h)	; @ 0x170936
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x81508 in this version
@@ -1375,6 +1377,13 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA3],(5F8B5h-81508h)	; @ 0x5F8B5
 	mov	gs:[pDoAnimFrozen],(58A75h-81508h)	; @ 0x58A75
 	mov	gs:[pSuspence],(68188h-81508h)		; @ 0x68188
+	mov	gs:[pBRayThrowFist],(2E80Fh-81508h)	; @ 0x2E80F
+	mov	gs:[pBRayCommand],(2E5D8h-81508h)	; @ 0x2E5D8
+	mov	gs:[padd_alwobj],(1D604h-81508h)	; @ 0x1D604
+	mov	gs:[pStarDevActive],(5849Eh-81508h)	; @ 0x5849E
+	mov	gs:[pStarDerActive],(584BCh-81508h)	; @ 0x584BC
+	mov	gs:[pStarDevAddAlw],(6F03Dh-81508h)	; @ 0x6F03D
+	mov	gs:[pStarDerAddAlw],(6F051h-81508h)	; @ 0x6F051
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2

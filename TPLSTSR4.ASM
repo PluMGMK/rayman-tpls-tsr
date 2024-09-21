@@ -1204,6 +1204,8 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pdwDETDriverIndex],(181A78h-137634h); @ 0x181A78
 	mov	gs:[plevel],(16DCF0h-137634h)		; @ 0x16DCF0
 	mov	gs:[pflagCDPlay],(138FA8h-137634h)	; @ 0x138FA8
+	mov	gs:[pgele],(170956h-137634h)		; @ 0x170956
+	mov	gs:[pMusicCdActive],(170946h-137634h)	; @ 0x170946
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x81CA8 in this version
@@ -1240,6 +1242,13 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA3],(60055h-81CA8h)	; @ 0x60055
 	mov	gs:[pDoAnimFrozen],(59215h-81CA8h)	; @ 0x59215
 	mov	gs:[pSuspence],(68928h-81CA8h)		; @ 0x68928
+	mov	gs:[pBRayThrowFist],(2E80Fh-81CA8h)	; @ 0x2E80F
+	mov	gs:[pBRayCommand],(2E5D8h-81CA8h)	; @ 0x2E5D8
+	mov	gs:[padd_alwobj],(1D604h-81CA8h)	; @ 0x1D604
+	mov	gs:[pStarDerActive],(58C3Eh-81CA8h)	; @ 0x58C3E
+	mov	gs:[pStarDevActive],(58C5Ch-81CA8h)	; @ 0x58C5C
+	mov	gs:[pStarDerAddAlw],(6F7F1h-81CA8h)	; @ 0x6F7F1
+	mov	gs:[pStarDevAddAlw],(6F7DDh-81CA8h)	; @ 0x6F7DD
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2

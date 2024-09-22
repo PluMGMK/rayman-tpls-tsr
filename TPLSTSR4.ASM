@@ -324,18 +324,24 @@ hmidrv_buffer	db BUFSIZE dup (?)
 
 statusword	dw 0	; bitfield with the following entries:
 STATBIT_EMS	equ 0	; Payload in EMS
-STATBIT_HMIRED	equ 1	; HMIDRV.386 redirect active
-STATBIT_DRMRED	equ 2	; Other file redirects active (for DRM)
-STATBIT_ACTIVE	equ 3	; Payload active
+STATBIT_NOFANF	equ 1	; User has disabled CD fanfare / death sound
+STATBIT_NOAMB	equ 2	; User has disabled ambient music
+STATBIT_MUSONLY	equ 3	; User has specified "music only", no visual fixes
 STATBIT_RUNCB	equ 4	; Hookpoints dirty so we need to run RM callback
 STATBIT_EMSSAV	equ 5	; EMS state saved
 STATBIT_WIN9X	equ 6	; Running on Win9x
 STATBIT_EXTDRM	equ 7	; Spoof Copyright / Abstract / Bibliographic Filenames
 STATBIT_SPOOF	equ 8	; Next Audio Disc Info Request should return spoofed data
 STATBIT_IMMRET	equ 9	; Win9x int 31h handler should return immediately after calling RM int 2Fh
-STATBIT_USVER	equ 0Ah	; US Rayman version running
+STATBIT_USVER	equ 10	; US Rayman version running
+STATBIT_HMIRED	equ 11	; HMIDRV.386 redirect active
+STATBIT_DRMRED	equ 12	; Other file redirects active (for DRM)
+STATBIT_ACTIVE	equ 13	; Payload active
 ; literal constants that can be ORed together:
 STAT_EMS	equ 1 SHL STATBIT_EMS
+STAT_NOFANF	equ 1 SHL STATBIT_NOFANF
+STAT_NOAMB	equ 1 SHL STATBIT_NOAMB
+STAT_MUSONLY	equ 1 SHL STATBIT_MUSONLY
 STAT_HMIRED	equ 1 SHL STATBIT_HMIRED
 STAT_DRMRED	equ 1 SHL STATBIT_DRMRED
 STAT_ACTIVE	equ 1 SHL STATBIT_ACTIVE
@@ -346,6 +352,9 @@ STAT_EXTDRM	equ 1 SHL STATBIT_EXTDRM
 STAT_SPOOF	equ 1 SHL STATBIT_SPOOF
 STAT_IMMRET	equ 1 SHL STATBIT_IMMRET
 STAT_USVER	equ 1 SHL STATBIT_USVER
+; this combination persists across Rayman runs since they were
+; specified or determined at the initial invocation of the TSR:
+STAT_PERSMASK	equ STAT_EMS OR STAT_NOFANF OR STAT_NOAMB OR STAT_MUSONLY OR STAT_WIN9X
 
 emshdl		dw 0
 pageframe	dw 0
@@ -2171,7 +2180,7 @@ tpls_int21	proc
 
 @@exit:
 	; Reset everything when Rayman exits
-	test	cs:[statusword],not STAT_EMS
+	test	cs:[statusword],not STAT_PERSMASK
 	jz	@F
 
 	push	ds
@@ -2182,9 +2191,8 @@ tpls_int21	proc
 	pop	ds
 	assume	ds:stub
 
-	; "Using EMS" and "being on Win9x" don't change across Rayman runs!
-	; Other bits reset for a new run.
-	and	[statusword],STAT_WIN9X OR STAT_EMS
+	; Non-persistent bits reset for a new run.
+	and	[statusword],STAT_PERSMASK
 	; Reset this too, to make sure we go through whatever rigmarole
 	; is needed if another version is launched in the same session!
 	mov	[suitable_cddrv],0
@@ -2417,6 +2425,9 @@ payload	segment use32
 	pop	ds
 	pop	es
 
+	; we'll need this shortly
+	push	gs:[statusword]
+
 	lgs	edi,[ebp-24h]	; points at return addx of driver immediately below sosDRVInit's stack frame
 	assume	gs:nothing
 	mov	[rayman_cs],gs
@@ -2450,6 +2461,11 @@ payload	segment use32
 @@:
 	mov	[rayman_cs_asds],ax
 
+	; Get back the status word
+	pop	dx
+	bt	dx,STATBIT_NOAMB
+	jc	@F
+
 	; Read in the "MIDI" track data
 	lea	edx,midi_file_path
 	call	read_ambient_file
@@ -2470,11 +2486,19 @@ payload	segment use32
 	; this function only runs when Rayman is setting up sound
 	; (i.e. long after the CD init code is over and done with)
 	call	setup_tracklens
+
+	; Get stub segment into GS so we can read the status word
+	call	get_stub_seg
+	assume	gs:stub
 	call	setup_hooks
+
+	bt	gs:[statusword],STATBIT_MUSONLY
+	jc	@@passthrough	; allow user to disable visual bug fixes
 	call	fix_curse_stars
 
 @@passthrough:
 	pop	gs
+	assume	gs:nothing
 	pop	edi
 	pop	ds
 	assume	ds:nothing
@@ -2778,7 +2802,10 @@ setup_tracklens	proc near	uses es edi esi edx ecx ebx eax ebp
 setup_tracklens	endp
 
 ; insert all the hooks we need into Rayman's text
+; (requires GS to point to the stub)
 setup_hooks	proc near	uses ecx edx
+	assume	gs:stub
+
 	; General hooks
 	mov	edx,[pLevelStart1]
 	call	set_hookpoint
@@ -2801,13 +2828,15 @@ setup_hooks	proc near	uses ecx edx
 
 	; Hooks to make the PC version use CD audio where it normally doesn't
 	; (but other versions normally do)
+	mov	edx,[pSuspence]
+	call	set_hookpoint
+	bt	gs:[statusword],STATBIT_NOFANF
+	jc	@F	; none of these are needed if fanfare disabled
 	mov	edx,[pExitSign1]
 	call	set_hookpoint
 	mov	edx,[pExitSign2]
 	call	set_hookpoint
 	mov	edx,[pPerdu]
-	call	set_hookpoint
-	mov	edx,[pSuspence]
 	call	set_hookpoint
 
 	; Hooks to delay level transition until fanfare CD audio has fully played out
@@ -2819,20 +2848,22 @@ setup_hooks	proc near	uses ecx edx
 	call	set_hookpoint
 	mov	edx,[pDoAnimFrozen]
 	call	set_hookpoint
-
+@@:
 	; Hook Bad Rayman's command function to ensure we have an up-to-date pointer to him.
 	; This also guarantees that the "throw fist" hookpoint below is active when it's reached!
 	mov	edx,[pBRayCommand]
 	call	set_hookpoint
 
-	; Hooks to fix visual bugs in the PC version (TODO: make optional)
+	; Hooks to fix visual bugs in the PC version
+	bt	gs:[statusword],STATBIT_MUSONLY
+	jc	@F	; allow user to disable visual bug fixes
 	mov	edx,[pBRayThrowFist]
 	call	set_hookpoint
 	mov	edx,[pStarDerAddAlw]
 	call	set_hookpoint
 	mov	edx,[pStarDevAddAlw]
 	call	set_hookpoint
-
+@@:
 	; Hooks to select the language-appropriate cutscene music
 	mov	edx,[pPlayIntro]
 	test	edx,edx
@@ -2868,6 +2899,7 @@ setup_hooks	proc near	uses ecx edx
 	call	set_hookpoint
 
 @@:
+	assume	gs:nothing
 	ret
 setup_hooks	endp
 
@@ -4888,9 +4920,21 @@ entry:
 	; we have a switch...
 	lodsb
 	or	al,20h	; make lowercase
-	cmp	al,'e'
+	cmp	al,'e'	; EMS
 	sete	ah
-	; set Bit 0 if needed
+	.errnz	STATBIT_EMS	; set Bit 0 if needed
+	or	byte ptr fs:[statusword],ah
+	cmp	al,'n'	; No fanfare / death music
+	sete	ah
+	shl	ah,STATBIT_NOFANF
+	or	byte ptr fs:[statusword],ah
+	cmp	al,'c'	; CD music only
+	sete	ah
+	shl	ah,STATBIT_NOAMB
+	or	byte ptr fs:[statusword],ah
+	cmp	al,'m'	; Music only
+	sete	ah
+	shl	ah,STATBIT_MUSONLY
 	or	byte ptr fs:[statusword],ah
 	loop	@B
 

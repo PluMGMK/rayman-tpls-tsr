@@ -327,7 +327,7 @@ STATBIT_EMS	equ 0	; Payload in EMS
 STATBIT_NOFANF	equ 1	; User has disabled CD fanfare / death sound
 STATBIT_NOAMB	equ 2	; User has disabled ambient music
 STATBIT_MUSONLY	equ 3	; User has specified "music only", no visual fixes
-STATBIT_RUNCB	equ 4	; Hookpoints dirty so we need to run RM callback
+STATBIT_COLFIST	equ 4	; User wants to enable collision on Bad Rayman's fist
 STATBIT_EMSSAV	equ 5	; EMS state saved
 STATBIT_WIN9X	equ 6	; Running on Win9x
 STATBIT_EXTDRM	equ 7	; Spoof Copyright / Abstract / Bibliographic Filenames
@@ -337,11 +337,13 @@ STATBIT_USVER	equ 10	; US Rayman version running
 STATBIT_HMIRED	equ 11	; HMIDRV.386 redirect active
 STATBIT_DRMRED	equ 12	; Other file redirects active (for DRM)
 STATBIT_ACTIVE	equ 13	; Payload active
+STATBIT_RUNCB	equ 14	; Hookpoints dirty so we need to run RM callback
 ; literal constants that can be ORed together:
 STAT_EMS	equ 1 SHL STATBIT_EMS
 STAT_NOFANF	equ 1 SHL STATBIT_NOFANF
 STAT_NOAMB	equ 1 SHL STATBIT_NOAMB
 STAT_MUSONLY	equ 1 SHL STATBIT_MUSONLY
+STAT_COLFIST	equ 1 SHL STATBIT_COLFIST
 STAT_HMIRED	equ 1 SHL STATBIT_HMIRED
 STAT_DRMRED	equ 1 SHL STATBIT_DRMRED
 STAT_ACTIVE	equ 1 SHL STATBIT_ACTIVE
@@ -3465,6 +3467,7 @@ pMusicCdActive	dd ?
 end_dataptrs:
 
 pBadRayman	dd 0	; Pointer to Bad Rayman's object data (runtime)
+pHackedEtaFlags	dd 0	; Pointer to last PNG.ETA flags byte we hacked
 
 ; Track on-the-fly music tampering
 plen_to_restore	dd ?
@@ -3910,10 +3913,8 @@ hook_handler	proc
 	call	get_stub_seg
 	assume	gs:stub
 	bts	gs:[statusword],STATBIT_RUNCB
-	; while we're here, check for a US version
-	bt	gs:[statusword],STATBIT_USVER
-	; CL = 1 if US version, 0 otherwise
-	setc	cl
+	; while we're here, get the status word into CX
+	mov	cx,gs:[statusword]
 	pop	gs
 	assume	gs:nothing
 
@@ -4026,10 +4027,17 @@ hook_handler	proc
 
 	; Also forget whatever "MIDI" track we're playing, as "stop_all_snd"
 	; has either just been called or will be called soon...
+	mov	eax,ecx
 	dec	ecx
 	; Set these to -1 to indicate no ambient playing anymore
 	mov	[midi_sample_idx],ecx
 	mov	[midi_cur_track],ecx
+
+	; Restore any etat flags we've tampered with!
+	xchg	eax,[pHackedEtaFlags]
+	test	eax,eax
+	jz	@@retpoint
+	and	byte ptr es:[eax],NOT 20h
 	jmp	@@retpoint
 
 ; The world-loading vignette is appearing on the screen.
@@ -4427,13 +4435,43 @@ hook_handler	proc
 	; * the fist's PC_Flags in AH
 	; (inconveniently, both of those are on our stack rather than in regs!)
 	test	byte ptr [esp+5],PC_FLAG_ISALIVE	; AH includes IsAlive?
-	jnz	@@retpoint				; yes, already active, no action needed
+	jnz	@F
 
 	mov	eax,[esp]	; ECX value of interrupted code
 	push	edi
 	mov	edi,[padd_alwobj]
 	call	call_code_in_rayman
 	pop	edi
+@@:
+	; Fist is in flight, should it kill Rayman?
+	bt	cx,STATBIT_COLFIST
+	jnc	@@retpoint
+	mov	ecx,[esp]	; ECX value of interrupted code
+	; Get the fist's state index
+	movzx	eax,es:[ecx].Rayman_ObjData.Etat
+	; Convert to offset within ETA data
+	shl	eax,2
+	; Get the actual location of the state pointer
+	add	eax,es:[ecx].Rayman_ObjData.ETAPointer
+	; And then get the pointer itself into EAX
+	mov	eax,es:[eax]
+	; Get the substate index
+	movzx	ecx,es:[ecx].Rayman_ObjData.SubEtat
+	; Get the offset to that substate's flags
+	lea	eax,[eax+ecx*8+7]
+	; Did we already hack this one?
+	cmp	eax,[pHackedEtaFlags]
+	je	@@retpoint
+
+	; OK, set the flag to make it collide with Rayman
+	or	byte ptr es:[eax],20h
+	; And unhack the previous one if necessary
+	; (this is "FIX" data we're tampering with,
+	; so I don't want to do anything persistent!)
+	xchg	eax,[pHackedEtaFlags]
+	test	eax,eax
+	jz	@@retpoint
+	and	byte ptr es:[eax],NOT 20h
 	jmp	@@retpoint
 
 ; Bad Rayman's object code is running - his pointer is in EAX, capture it!
@@ -4461,9 +4499,9 @@ hook_handler	proc
 
 ; game is about to play a cutscene - select the right music
 @@cutscene:
-	; CL was set above to indicate whether or not this is a US version -
-	; put this into BH for a moment...
-	mov	bh,cl
+	; status word is now in CX - use BH to indicate US version
+	bt	cx,STATBIT_USVER
+	setc	bh
 
 	mov	ecx,[plang]
 	mov	bl,es:[ecx]		; BL contains the track number passed to the cutscene function
@@ -4935,6 +4973,10 @@ entry:
 	cmp	al,'m'	; Music only
 	sete	ah
 	shl	ah,STATBIT_MUSONLY
+	or	byte ptr fs:[statusword],ah
+	cmp	al,'f'	; Fist kills Rayman
+	sete	ah
+	shl	ah,STATBIT_COLFIST
 	or	byte ptr fs:[statusword],ah
 	loop	@B
 

@@ -4204,6 +4204,9 @@ hook_handler	proc
 	cmp	[midi_cur_track],AMBIENT_BBDEAD
 	jne	@@retpoint
 
+	call	music_active
+	jz	@@retpoint
+
 	; set a *temporary* hookpoint on sosDIGIStopSample
 	push	edx
 	mov	edx,[psosDIGIStop]

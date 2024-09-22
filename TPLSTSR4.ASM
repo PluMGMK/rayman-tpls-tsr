@@ -773,6 +773,8 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pdwDETDriverIndex],(50B78h-6664h)	; @ 0x50B78 in the data section
 	mov	gs:[plevel],(3CDF0h-6664h)		; @ 0x3CDF0 in the data section
 	mov	gs:[pflagCDPlay],(7F78h-6664h)		; @ 0x7F78 in the data section
+	mov	gs:[pgele],(3FA62h-6664h)		; @ 0x3FA62 in the data section
+	mov	gs:[pMusicCdActive],(3FA50h-6664h)	; @ 0x3FA50 in the data section
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x73D6D in this version
@@ -810,6 +812,13 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA3],(524E5h-73D6Dh)	; @ 0x524E5 in the text section
 	mov	gs:[pDoAnimFrozen],(4B6A5h-73D6Dh)	; @ 0x4B6A5 in the text section
 	mov	gs:[pSuspence],(5ADE8h-73D6Dh)		; @ 0x5ADE8 in the text section
+	mov	gs:[pBRayThrowFist],(20B3Fh-73D6Dh)	; @ 0x20B3F in the text section
+	mov	gs:[pBRayCommand],(20908h-73D6Dh)	; @ 0x20908 in the text section
+	mov	gs:[padd_alwobj],(0F8E8h-73D6Dh)	; @ 0x0F8E8 in the text section
+	mov	gs:[pStarDevActive],(4B0CEh-73D6Dh)	; @ 0x4B0CE in the text section
+	mov	gs:[pStarDerActive],(4B0ECh-73D6Dh)	; @ 0x4B0EC in the text section
+	mov	gs:[pStarDevAddAlw],(6174Dh-73D6Dh)	; @ 0x6174D in the text section
+	mov	gs:[pStarDerAddAlw],(61761h-73D6Dh)	; @ 0x61761 in the text section
 
 	jmp	@@payload_fixedup
 
@@ -831,6 +840,8 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pdwDETDriverIndex],(181B78h-137664h); @ 0x181B78
 	mov	gs:[plevel],(16DDF0h-137664h)		; @ 0x16DDF0
 	mov	gs:[pflagCDPlay],(138F78h-137664h)	; @ 0x138F78
+	mov	gs:[pgele],(170A62h-137664h)		; @ 0x170A62
+	mov	gs:[pMusicCdActive],(170A50h-137664h)	; @ 0x170A50
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x81D8D in this version
@@ -867,6 +878,13 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA3],(60505h-81D8Dh)	; @ 0x60505
 	mov	gs:[pDoAnimFrozen],(596C5h-81D8Dh)	; @ 0x596C5
 	mov	gs:[pSuspence],(68E08h-81D8Dh)		; @ 0x68E08
+	mov	gs:[pBRayThrowFist],(2EB3Fh-81D8Dh)	; @ 0x2EB3F
+	mov	gs:[pBRayCommand],(2E908h-81D8Dh)	; @ 0x2E908
+	mov	gs:[padd_alwobj],(1D8E8h-81D8Dh)	; @ 0x1D8E8
+	mov	gs:[pStarDevActive],(590EEh-81D8Dh)	; @ 0x590EE
+	mov	gs:[pStarDerActive],(5910Ch-81D8Dh)	; @ 0x5910C
+	mov	gs:[pStarDevAddAlw],(6F76Dh-81D8Dh)	; @ 0x6F76D
+	mov	gs:[pStarDerAddAlw],(6F781h-81D8Dh)	; @ 0x6F781
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -890,6 +908,8 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pdwDETDriverIndex],(181D98h-137694h); @ 0x181D98
 	mov	gs:[plevel],(16DFF0h-137694h)		; @ 0x16DFF0
 	mov	gs:[pflagCDPlay],(138FA8h-137694h)	; @ 0x138FA8
+	mov	gs:[pgele],(170C7Ah-137694h)		; @ 0x170C7A
+	mov	gs:[pMusicCdActive],(170C68h-137694h)	; @ 0x170C68
 
 	; Addresses relative to retpoint of sosDRVInit in Rayman's text section
 	; It's at 0x8169D in this version
@@ -926,6 +946,13 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA3],(604F5h-8169Dh)	; @ 0x604F5
 	mov	gs:[pDoAnimFrozen],(596B5h-8169Dh)	; @ 0x596B5
 	mov	gs:[pSuspence],(684ACh-8169Dh)		; @ 0x684AC
+	mov	gs:[pBRayThrowFist],(2EB3Fh-8169Dh)	; @ 0x2EB3F
+	mov	gs:[pBRayCommand],(2E908h-8169Dh)	; @ 0x2E908
+	mov	gs:[padd_alwobj],(1D8E8h-8169Dh)	; @ 0x1D8E8
+	mov	gs:[pStarDevActive],(590DEh-8169Dh)	; @ 0x590DE
+	mov	gs:[pStarDerActive],(590FCh-8169Dh)	; @ 0x590FC
+	mov	gs:[pStarDevAddAlw],(6F04Dh-8169Dh)	; @ 0x6F04D
+	mov	gs:[pStarDerAddAlw],(6F061h-8169Dh)	; @ 0x6F061
 
 	; This version has DRM that involves checking files on the CD
 	bts	cs:[statusword],2
@@ -4203,7 +4230,7 @@ hook_handler	proc
 @@exit_stop_all_snd:
 	cmp	[midi_cur_track],AMBIENT_BBDEAD
 	jne	@@retpoint
-
+	; don't bother to hook it if Music is off
 	call	music_active
 	jz	@@retpoint
 

@@ -236,6 +236,7 @@ Rayman_ObjData struc
 				dw ? ; padding
 Rayman_ObjData ends
 .errnz	size Rayman_ObjData - 84h
+PC_FLAG_ISALIVE	equ 4
 
 ; values for ObjType
 TYPE_BALLE1	equ 13	; a shot bullet ("always" object which we can replace)
@@ -321,18 +322,30 @@ hmidrv_drvhdr	_SOS_DRV_DRIVERHEADER <{?}>
 BUFSIZE		equ 1 SHL ?LOG_BUFSIZE
 hmidrv_buffer	db BUFSIZE dup (?)
 
-; Bit 0 = Payload in EMS
-; Bit 1 = HMIDRV.386 redirect active
-; Bit 2 = Other file redirects active (for DRM)
-; Bit 3 = Payload active
-; Bit 4 = Hookpoints dirty
-; Bit 5 = EMS state saved
-; Bit 6 = Running on Win9x
-; Bit 7 = Spoof Copyright / Abstract / Bibliographic Filenames
-; Bit 8 = Next Audio Disc Info Request should return spoofed data
-; Bit 9 = Win9x int 31h handler should return immediately after calling RM int 2Fh
-; Bit A = US Rayman version running
-statusword	dw 0
+statusword	dw 0	; bitfield with the following entries:
+STATBIT_EMS	equ 0	; Payload in EMS
+STATBIT_HMIRED	equ 1	; HMIDRV.386 redirect active
+STATBIT_DRMRED	equ 2	; Other file redirects active (for DRM)
+STATBIT_ACTIVE	equ 3	; Payload active
+STATBIT_RUNCB	equ 4	; Hookpoints dirty so we need to run RM callback
+STATBIT_EMSSAV	equ 5	; EMS state saved
+STATBIT_WIN9X	equ 6	; Running on Win9x
+STATBIT_EXTDRM	equ 7	; Spoof Copyright / Abstract / Bibliographic Filenames
+STATBIT_SPOOF	equ 8	; Next Audio Disc Info Request should return spoofed data
+STATBIT_IMMRET	equ 9	; Win9x int 31h handler should return immediately after calling RM int 2Fh
+STATBIT_USVER	equ 0Ah	; US Rayman version running
+; literal constants that can be ORed together:
+STAT_EMS	equ 1 SHL STATBIT_EMS
+STAT_HMIRED	equ 1 SHL STATBIT_HMIRED
+STAT_DRMRED	equ 1 SHL STATBIT_DRMRED
+STAT_ACTIVE	equ 1 SHL STATBIT_ACTIVE
+STAT_RUNCB	equ 1 SHL STATBIT_RUNCB
+STAT_EMSSAV	equ 1 SHL STATBIT_EMSSAV
+STAT_WIN9X	equ 1 SHL STATBIT_WIN9X
+STAT_EXTDRM	equ 1 SHL STATBIT_EXTDRM
+STAT_SPOOF	equ 1 SHL STATBIT_SPOOF
+STAT_IMMRET	equ 1 SHL STATBIT_IMMRET
+STAT_USVER	equ 1 SHL STATBIT_USVER
 
 emshdl		dw 0
 pageframe	dw 0
@@ -485,7 +498,7 @@ map_payload_seg	endp
 ; Get the payload segment into GS
 ; CF set if an EMS error occurred
 get_payload_seg	proc near	uses ax
-	bt	cs:[statusword],0
+	bt	cs:[statusword],STATBIT_EMS
 	jc	@F
 
 	mov	ax,payload
@@ -495,7 +508,7 @@ get_payload_seg	proc near	uses ax
 	ret
 
 @@:
-	bts	cs:[statusword],5
+	bts	cs:[statusword],STATBIT_EMSSAV
 	jc	@F	; state already saved
 
 	mov	ah,47h	; save page map
@@ -506,7 +519,7 @@ get_payload_seg	proc near	uses ax
 	test	ah,ah
 	jz	@F
 
-	btr	cs:[statusword],5	; sets CF
+	btr	cs:[statusword],STATBIT_EMSSAV	; sets CF
 	ret
 
 @@:
@@ -514,7 +527,7 @@ get_payload_seg	proc near	uses ax
 	jnc	@@success
 
 	call	restore_ems
-	btr	cs:[statusword],5	; sets CF
+	btr	cs:[statusword],STATBIT_EMSSAV	; sets CF
 	ret
 get_payload_seg	endp
 
@@ -614,7 +627,7 @@ setup_music_redirect endp
 ; In normal DOS, this is further up the interrupt chain, so we do a far call.
 ; In Windows 9x, it's a protected mode handler, so we have to invoke the interrupt again.
 do_int2f	proc near
-	bt	cs:[statusword],6	; Windows 9x
+	bt	cs:[statusword],STATBIT_WIN9X
 	jc	@F
 
 	pushf
@@ -754,7 +767,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	jmp	@@retpoint
 
 @@setup_ptrs_v121us:
-	bts	cs:[statusword],0Ah			; indicate US version
+	bts	cs:[statusword],STATBIT_USVER
 
 	; Addresses relative to sSOSDIGIInitDriver in Rayman's data section
 	; It's at 0x6664 in this version
@@ -887,7 +900,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pStarDerAddAlw],(6F781h-81D8Dh)	; @ 0x6F781
 
 	; This version has DRM that involves checking files on the CD
-	bts	cs:[statusword],2
+	bts	cs:[statusword],STATBIT_DRMRED
 	jmp	@@payload_fixedup
 
 @@setup_ptrs_v121ch:
@@ -955,7 +968,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pStarDerAddAlw],(6F061h-8169Dh)	; @ 0x6F061
 
 	; This version has DRM that involves checking files on the CD
-	bts	cs:[statusword],2
+	bts	cs:[statusword],STATBIT_DRMRED
 	jmp	@@payload_fixedup
 
 @@setup_ptrs_v120itspdu:
@@ -1024,7 +1037,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pStarDerAddAlw],(6FCC1h-8220Fh)	; @ 0x6FCB1
 
 	; This version has DRM that involves checking files on the CD
-	bts	cs:[statusword],2
+	bts	cs:[statusword],STATBIT_DRMRED
 	jmp	@@payload_fixedup
 
 @@setup_ptrs_v120jp:
@@ -1092,7 +1105,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pStarDerAddAlw],(6F921h-81EB9h)	; @ 0x6F921
 
 	; This version has DRM that involves checking files on the CD
-	bts	cs:[statusword],2
+	bts	cs:[statusword],STATBIT_DRMRED
 	jmp	@@payload_fixedup
 
 @@setup_ptrs_v120uk:
@@ -1167,7 +1180,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pStarDerAddAlw],(6FCC1h-8220Fh)	; @ 0x6FCB1
 
 	; This version has DRM that involves checking files on the CD
-	bts	cs:[statusword],2
+	bts	cs:[statusword],STATBIT_DRMRED
 	jmp	@@payload_fixedup
 
 @@setup_ptrs_v120de:
@@ -1241,11 +1254,11 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pStarDerAddAlw],(6FCC1h-8220Fh)	; @ 0x6FCC1
 
 	; This version has DRM that involves checking files on the CD
-	bts	cs:[statusword],2
+	bts	cs:[statusword],STATBIT_DRMRED
 	jmp	@@payload_fixedup
 
 @@setup_ptrs_v112us:
-	bts	cs:[statusword],0Ah			; indicate US version
+	bts	cs:[statusword],STATBIT_USVER
 
 	mov	di,offset unprotected + sizeof unprotected - 1
 	mov	cx,-(sizeof unprotected)
@@ -1316,7 +1329,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pStarDerAddAlw],(6F7F1h-81CA8h)	; @ 0x6F7F1
 
 	; This version has DRM that involves checking files on the CD
-	bts	cs:[statusword],2
+	bts	cs:[statusword],STATBIT_DRMRED
 	jmp	@@payload_fixedup
 
 @@setup_ptrs_v112us_unprotected:
@@ -1451,7 +1464,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pStarDerAddAlw],(6F051h-81508h)	; @ 0x6F051
 
 	; This version has DRM that involves checking files on the CD
-	bts	cs:[statusword],2
+	bts	cs:[statusword],STATBIT_DRMRED
 	jmp	@@payload_fixedup
 
 @@setup_ptrs_v110eu:
@@ -1521,9 +1534,9 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pStarDerAddAlw],(6F121h-81678h)	; @ 0x6F121
 
 	; This version has DRM that involves checking files on the CD
-	bts	cs:[statusword],2
+	bts	cs:[statusword],STATBIT_DRMRED
 	; And another involving the metadata!
-	bts	cs:[statusword],7
+	bts	cs:[statusword],STATBIT_EXTDRM
 	; And it expects a very specific length of data on the CD...
 	mov	cs:[spoof_info.addr_leadout],401D18h
 	jmp	@@payload_fixedup
@@ -1595,9 +1608,9 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pStarDerAddAlw],(6F0D1h-81548h)	; @ 0x6F0D1
 
 	; This version has DRM that involves checking files on the CD
-	bts	cs:[statusword],2
+	bts	cs:[statusword],STATBIT_DRMRED
 	; And another involving the metadata!
-	bts	cs:[statusword],7
+	bts	cs:[statusword],STATBIT_EXTDRM
 	; And it expects a very specific length of data on the CD...
 	mov	cs:[spoof_info.addr_leadout],401E19h
 
@@ -1762,7 +1775,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	clc
 @@retpoint:
 	pushf	; save CF state
-	btr	cs:[statusword],5
+	btr	cs:[statusword],STATBIT_EMSSAV
 	jnc	@F
 	call	restore_ems
 @@:
@@ -1783,7 +1796,8 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	dx,offset payload_fail
 	pushf
 	call	old_int21
-	btr	[statusword],2	; unset any DRM redirections we may have set
+	; unset any DRM redirections we may have set:
+	btr	[statusword],STATBIT_DRMRED
 	stc
 	jmp	@@retpoint
 
@@ -1847,7 +1861,7 @@ chk_suitablecd	proc near	uses ds ax cx es bx dx
 	call	old_int21
 
 @@:
-	bt	[statusword],7			; extra DRM?
+	bt	[statusword],STATBIT_EXTDRM	; extra DRM?
 	jnc	@F
 
 	; Rayman v1.00 and v1.10 have extra DRMs, which we won't bypass,
@@ -2005,7 +2019,7 @@ chk_biossums	endp
 tpls_int21	proc
 	assume	ds:nothing,es:nothing
 
-	test	cs:[statusword],46h	; Win9x and/or redirects
+	test	cs:[statusword],STAT_WIN9X OR STAT_DRMRED OR STAT_HMIRED
 	jnz	@F	; redirect(s) active!
 	jmp	cs:old_int21
 
@@ -2029,7 +2043,7 @@ tpls_int21	proc
 	mov	si,dx
 	cld
 
-	bt	cs:[statusword],1
+	bt	cs:[statusword],STATBIT_HMIRED
 	jnc	@@nothmidrv
 	mov	di,offset hmidrv
 	mov	cx,sizeof hmidrv
@@ -2048,7 +2062,7 @@ tpls_int21	proc
 	jmp	@@callthrough
 
 @@nothmidrv:
-	bt	cs:[statusword],2
+	bt	cs:[statusword],STATBIT_DRMRED
 	jnc	@@notcdredir
 
 	lodsw
@@ -2102,7 +2116,7 @@ tpls_int21	proc
 	je	@@redir_local
 
 @@notcdredir:
-	bt	cs:[statusword],6	; Windows 9x
+	bt	cs:[statusword],STATBIT_WIN9X
 	jnc	@@passthrough
 	call	openredir_9x
 
@@ -2157,7 +2171,7 @@ tpls_int21	proc
 
 @@exit:
 	; Reset everything when Rayman exits
-	test	cs:[statusword],not 1
+	test	cs:[statusword],not STAT_EMS
 	jz	@F
 
 	push	ds
@@ -2168,10 +2182,9 @@ tpls_int21	proc
 	pop	ds
 	assume	ds:stub
 
-	; Bit 0 means using EMS, which doesn't change across Rayman runs.
-	; Likewise for Bit 6, meaning running on Windows 9x.
+	; "Using EMS" and "being on Win9x" don't change across Rayman runs!
 	; Other bits reset for a new run.
-	and	[statusword],41h
+	and	[statusword],STAT_WIN9X OR STAT_EMS
 	; Reset this too, to make sure we go through whatever rigmarole
 	; is needed if another version is launched in the same session!
 	mov	[suitable_cddrv],0
@@ -2211,12 +2224,12 @@ tpls_int2f	proc
 @@:
 	cmp	ah,15h	; MSCDEX call?
 	jne	@@uncond_passthrough
-	bt	cs:[statusword],3	; payload active?
+	bt	cs:[statusword],STATBIT_ACTIVE
 	jnc	@F
 
-	btr	cs:[statusword],4	; need to run the callback?
+	btr	cs:[statusword],STATBIT_RUNCB
 	jnc	@@passthrough
-	bt	cs:[statusword],6	; on Win9x, this code should be unreachable
+	bt	cs:[statusword],STATBIT_WIN9X
 	jc	@@passthrough		; but test for it just in case...
 	
 	; the payload sets this when it activates
@@ -2225,10 +2238,10 @@ tpls_int2f	proc
 
 @@:
 	; We don't have a PM companion, need to handle everything in RM
-	bt	cs:[statusword],1	; redirects active?
+	bt	cs:[statusword],STATBIT_HMIRED
 	jnc	@@mscdex_noredir
 
-	bt	cs:[statusword],7	; spoofing active?
+	bt	cs:[statusword],STATBIT_EXTDRM
 	jnc	@F
 
 	; GET COPYRIGHT / ABSTRACT / BIBLIOGRAPHIC DOC FILENAME
@@ -2239,15 +2252,15 @@ tpls_int2f	proc
 	   mov	byte ptr es:[bx+6],0
 
 	   ; in a moment, Rayman will also check the audio info
-	   bts	cs:[statusword],8	; so have the right answer ready!
+	   bts	cs:[statusword],STATBIT_SPOOF	; so have the right answer ready!
 	   jmp	@@return_success
 	.endif
 
 @@:
-	cmp	al,10h		; send driver request
+	cmp	al,10h				; send driver request
 	jne	@@passthrough
 
-	bt	cs:[statusword],8	; spoofing needed?
+	bt	cs:[statusword],STATBIT_SPOOF	; spoofing needed?
 	jnc	@F
 
 	.if	es:[bx.IOCTLRW.bCmd] == 3; IOCTL INPUT
@@ -2287,10 +2300,10 @@ tpls_int2f	proc
 	jc	@@passthrough
 
 	; activate redirects if successful
-	bts	cs:[statusword],1
+	bts	cs:[statusword],STATBIT_HMIRED
 
 @@passthrough:
-	bt	cs:[statusword],6	; Windows 9x
+	bt	cs:[statusword],STATBIT_WIN9X
 	jc	@F
 @@uncond_passthrough:
 	jmp	cs:old_int2f
@@ -2300,7 +2313,7 @@ tpls_int2f	proc
 
 @@audinfo:
 	; clear this bit so the next request won't be spoofed!
-	btr	cs:[statusword],8
+	btr	cs:[statusword],STATBIT_SPOOF
 
 	push	si
 	lea	si,spoof_info
@@ -2315,9 +2328,9 @@ tpls_int2f	proc
 
 @@return_success:
 	; if we're on Win9x, signal to the int 31h handler that it should IRET immediately
-	bt	cs:[statusword],6
+	bt	cs:[statusword],STATBIT_WIN9X
 	jnc	@F
-	bts	cs:[statusword],9
+	bts	cs:[statusword],STATBIT_IMMRET
 
 @@:
 	; return with CF clear
@@ -2356,11 +2369,11 @@ payload	segment use32
 	jc	@@stubseg_failure
 	assume	gs:stub
 	; turn off HMIDRV.386 redirect as the real file may need to be opened for the timer driver!
-	btr	gs:[statusword],1
+	btr	gs:[statusword],STATBIT_HMIRED
 
 	test	al,al	; init function?
 	jnz	@@passthrough
-	bts	gs:[statusword],3
+	bts	gs:[statusword],STATBIT_ACTIVE
 
 	push	eax
 	push	ebx
@@ -2383,7 +2396,7 @@ payload	segment use32
 	int	21h
 
 	; On Win9x, we don't allocate an RM callback, but just let the int 31h handler call the payload directly
-	bt	gs:[statusword],6
+	bt	gs:[statusword],STATBIT_WIN9X
 	jc	@F
 
 	mov	ax,303h	; allocate RM callback
@@ -2490,8 +2503,8 @@ payload	segment use32
 	pop	ds
 	jc	@F
 	assume	gs:stub
-	btr	gs:[statusword],3
-	bts	gs:[statusword],1
+	btr	gs:[statusword],STATBIT_ACTIVE
+	bts	gs:[statusword],STATBIT_HMIRED
 @@:
 	pop	gs
 	assume	gs:nothing
@@ -3427,6 +3440,12 @@ ptra_to_restore	dd ?
 len_to_restore	dd ?
 tra_to_restore	db 0
 music_dirty	db 0	; Have we messed with the music and need to restart it?
+DIRTYBIT_STD	equ 0
+DIRTYBIT_FANF	equ 7
+DIRTYBIT_FRZRAY	equ 6
+DIRTY_STD	equ 1 SHL DIRTYBIT_STD
+DIRTY_FANFARE	equ 1 SHL DIRTYBIT_FANF
+DIRTY_FREEZERAY	equ 1 SHL DIRTYBIT_FRZRAY
 
 align	2
 stub_selector	dw 0
@@ -3811,7 +3830,7 @@ restore_music	proc near
 	jmp	@@reset_decided
 
 @@delayed_reset:
-	mov	[music_dirty],1		; set dirty flag so the restored track will play on level reentry
+	mov	[music_dirty],DIRTY_STD	; set dirty flag so the restored track will play on level reentry
 
 @@reset_decided:
 	xchg	[tra_to_restore],cl
@@ -3858,9 +3877,9 @@ hook_handler	proc
 	push	gs
 	call	get_stub_seg
 	assume	gs:stub
-	bts	gs:[statusword],4
+	bts	gs:[statusword],STATBIT_RUNCB
 	; while we're here, check for a US version
-	bt	gs:[statusword],0Ah
+	bt	gs:[statusword],STATBIT_USVER
 	; CL = 1 if US version, 0 otherwise
 	setc	cl
 	pop	gs
@@ -4209,7 +4228,7 @@ hook_handler	proc
 	; Change music to track 29 (Rayman's victory fanfare).
 	mov	eax,29			; Yeah!
 	call	change_music
-	mov	[music_dirty],80h	; set fanfare flag
+	mov	[music_dirty],DIRTY_FANFARE
 	; Ensure it doesn't get interrupted
 	mov	eax,[pflagCDPlay]
 	mov	byte ptr es:[eax],0	; reset this so it only becomes non-zero when track ends...
@@ -4278,7 +4297,7 @@ hook_handler	proc
 ; It has just called "EOA" on Rayman, and AL is non-zero iff Rayman's "yeah" animation has finished playing.
 ; We also want to zero AL if the CD audio of the fanfare is still playing!
 @@eoa_check:
-	test	[music_dirty],80h	; check fanfare flag
+	test	[music_dirty],DIRTY_FANFARE
 	jz	@@retpoint
 
 	; Check if the game is frozen
@@ -4311,7 +4330,7 @@ hook_handler	proc
 	test	al,al			; check if EOA returned TRUE
 	jz	@@retpoint
 	; if it did, then set an additional flag so that we freeze Rayman until the CD audio is done:
-	or	[music_dirty],40h
+	or	[music_dirty],DIRTY_FREEZERAY
 	jmp	@@retpoint
 
 @@fanfare_done:
@@ -4320,7 +4339,7 @@ hook_handler	proc
 
 ; The game is frozen on an exit sign, but it's asking Rayman's sprite to animate. Check whether or not to allow this.
 @@freeze_check:
-	test	[music_dirty],40h
+	test	[music_dirty],DIRTY_FREEZERAY
 	jz	@@retpoint
 	; OK, Rayman's reached the end of his "yeah" animation, so freeze him until the CD audio finishes.
 	; We accomplish this by hopping over the call to "DO_ANIM":
@@ -4343,7 +4362,7 @@ hook_handler	proc
 	mov	eax,[pPlayTrack]
 	mov	[ebp],eax
 	mov	dword ptr [esp+4],30	; EAX --> Perdu
-	mov	[music_dirty],1		; set dirty flag to restart level music when Rayman respawns
+	mov	[music_dirty],DIRTY_STD	; set dirty flag to restart level music when Rayman respawns
 	; Ensure it doesn't get interrupted
 	mov	eax,[pcdTime]
 	mov	dword ptr es:[eax],-1	; wait forever before restarting music
@@ -4375,8 +4394,8 @@ hook_handler	proc
 	; * pointer to Bad Rayman's fist in ECX
 	; * the fist's PC_Flags in AH
 	; (inconveniently, both of those are on our stack rather than in regs!)
-	test	byte ptr [esp+5],4	; does AH include 4, the IsAlive flag?
-	jnz	@@retpoint		; yes, already active, no action needed
+	test	byte ptr [esp+5],PC_FLAG_ISALIVE	; AH includes IsAlive?
+	jnz	@@retpoint				; yes, already active, no action needed
 
 	mov	eax,[esp]	; ECX value of interrupted code
 	push	edi
@@ -4400,10 +4419,10 @@ hook_handler	proc
 @@:	; fetch the pointer from the stack
 	mov	eax,[esp+4]
 	mov	ch,es:[eax].Rayman_ObjData.PC_Flags
-	test	ch,4			; check IsAlive flag
+	test	ch,PC_FLAG_ISALIVE
 	jnz	@@retpoint
 	; go ahead and set the IsAlive flag and fix the DisplayPrio
-	or	ch,4
+	or	ch,PC_FLAG_ISALIVE
 	mov	es:[eax].Rayman_ObjData.PC_Flags,ch
 	mov	es:[eax].Rayman_ObjData.DisplayPrio,cl
 	jmp	@@retpoint
@@ -4730,10 +4749,10 @@ tpls_int31	proc
 	assume	ds:stub
 	pop	edi
 
-	bt	ds:[statusword],3	; payload active?
+	bt	ds:[statusword],STATBIT_ACTIVE	; payload active?
 	jnc	@F
 
-	btr	ds:[statusword],4	; need to run the callback?
+	btr	ds:[statusword],STATBIT_RUNCB	; need to run the callback?
 	jnc	@@done
 
 	pushad
@@ -4751,7 +4770,7 @@ tpls_int31	proc
 	push	cx
 
 	; Make sure this is clear now in case there is somehow a stale value there
-	btr	ds:[statusword],9
+	btr	ds:[statusword],STATBIT_IMMRET
 
 	; To avoid duplicating program logic, just pass this through to Real Mode
 	mov	ax,302h	; call Real Mode procedure w/IRET frame
@@ -4768,7 +4787,7 @@ tpls_int31	proc
 
 @@done:
 	; Check if RM handler wants us to IRET immediately
-	btr	ds:[statusword],9
+	btr	ds:[statusword],STATBIT_IMMRET
 	pop	ds
 	assume	ds:nothing
 	jc	@F	; CF set by BTR above
@@ -4789,7 +4808,7 @@ dummy_hook_off:
 	jne	@F
 
 	; If we were able to intercept int 2Fh, AX=1500h, then there's no need for the extra Win9x support code
-	btr	cs:[statusword],6
+	btr	cs:[statusword],STATBIT_WIN9X
 
 @@:
 	jmp	cs:old_int2f
@@ -4958,8 +4977,8 @@ entry:
 	mov	ax,252Fh; set int 2Fh vector
 	mov	dx,offset dummy_hook_off
 	int	21h
-	; set bit 6 here - if the OS doesn't intercept the call, dummy_hook will clear it
-	bts	[statusword],6
+	; set the bit here - if the OS doesn't intercept the call, dummy_hook will clear it
+	bts	[statusword],STATBIT_WIN9X
 
 	; Check MSCDEX is installed, and save drive letter range
 	mov	ax,1500h
@@ -4981,10 +5000,10 @@ entry:
 	jmp	@@exitwitherr
 
 @@:
-	bt	[statusword],6
+	bt	[statusword],STATBIT_WIN9X
 	jnc	@F
 
-	btr	[statusword],0	; don't do EMS if under Win9x
+	btr	[statusword],STATBIT_EMS	; don't do EMS if under Win9x
 	mov	dx,offset win9xfound
 	mov	ah,9	; write to stdout
 	int	21h
@@ -5006,7 +5025,7 @@ entry:
 
 	mov	bx,bp		; get PSP
 	mov	bp,dummy_hook	; dummy hook marks end of resident code
-	bt	fs:[statusword],6
+	bt	fs:[statusword],STATBIT_WIN9X
 	jc	@F
 
 	; No need for 9x support code
@@ -5014,7 +5033,7 @@ entry:
 @@:
 	sub	bp,bx	; total resident paragraphs
 
-	bt	fs:[statusword],0
+	bt	fs:[statusword],STATBIT_EMS
 	jnc	@@noems
 
 	mov	bp,payload

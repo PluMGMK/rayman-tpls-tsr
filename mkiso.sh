@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 # Create an ISO image for release, ensuring that its contents are up-to-date
 
 # First make sure the built EXEs are up-to-date

@@ -1,9 +1,9 @@
-#!/bin/bash
+#!/bin/bash -e
 # Create a bin/cue pair for a complete CD image
 
 # Remove existing files
-rm TPLSTSR4.bin
-rm TPLSTSR4.cue
+test -e TPLSTSR4.bin && rm TPLSTSR4.bin
+test -e TPLSTSR4.cue && rm TPLSTSR4.cue
 
 # Ensure ISO is up-to-date before creating a BIN
 ./mkiso.sh

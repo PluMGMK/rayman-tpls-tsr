@@ -5269,11 +5269,7 @@ status_report	proc near
 	lea	dx,newline
 	int	21h
 
-	; ZF will be cleared by the XOR above if we've written
-	; a line, so go back and check the next flag.
-	; If we've jumped from the beginning because there are
-	; no more flags, ZF will be set, so just return.
-	jnz	short @B
+	jmp	short @B
 @@:	ret
 status_report	endp
 

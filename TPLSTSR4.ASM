@@ -3468,6 +3468,7 @@ end_dataptrs:
 
 pBadRayman	dd 0	; Pointer to Bad Rayman's object data (runtime)
 pHackedEtaFlags	dd 0	; Pointer to last PNG.ETA flags byte we hacked
+ETA_FLAG_HITRAY	equ 20h	; Etat flag indicating that the sprite collides with Rayman
 
 ; Track on-the-fly music tampering
 plen_to_restore	dd ?
@@ -4033,12 +4034,8 @@ hook_handler	proc
 	mov	[midi_sample_idx],ecx
 	mov	[midi_cur_track],ecx
 
-	; Restore any etat flags we've tampered with!
-	xchg	eax,[pHackedEtaFlags]
-	test	eax,eax
-	jz	@@retpoint
-	and	byte ptr es:[eax],NOT 20h
-	jmp	@@retpoint
+	; Restore any etat flags we've tampered with! (Note EAX==0 here!)
+	jmp	@@untamper_etat
 
 ; The world-loading vignette is appearing on the screen.
 ; Start the corresponding "MIDI" track...
@@ -4463,15 +4460,19 @@ hook_handler	proc
 	cmp	eax,[pHackedEtaFlags]
 	je	@@retpoint
 
+	; If not, do we even need to?
+	test	byte ptr es:[eax],ETA_FLAG_HITRAY
+	jnz	@@retpoint
 	; OK, set the flag to make it collide with Rayman
-	or	byte ptr es:[eax],20h
+	or	byte ptr es:[eax],ETA_FLAG_HITRAY
 	; And unhack the previous one if necessary
 	; (this is "FIX" data we're tampering with,
 	; so I don't want to do anything persistent!)
+@@untamper_etat:
 	xchg	eax,[pHackedEtaFlags]
 	test	eax,eax
 	jz	@@retpoint
-	and	byte ptr es:[eax],NOT 20h
+	and	byte ptr es:[eax],NOT ETA_FLAG_HITRAY
 	jmp	@@retpoint
 
 ; Bad Rayman's object code is running - his pointer is in EAX, capture it!
@@ -5197,9 +5198,12 @@ entry:
 	mov	dx,offset tpls_int2f
 	int	21h
 
+	mov	bx,[statusword]
 	push	cs
 	pop	ds
 	assume	ds:init
+	call	status_report
+
 	mov	dx,offset goingresident
 	mov	ah,9	; write to stdout
 	int	21h
@@ -5216,6 +5220,62 @@ entry:
 	int	21h
 	mov	ax,4CFFh; EXIT with status FFh
 	int	21h
+
+; Print out the list of persistent status flags,
+; from the statusword given in BX (requires DS==CS)
+status_report	proc near
+	mov	ah,9	; write DS:DX to stdout
+	lea	dx,statreport
+	int	21h
+
+	lea	si,status_descs
+@@:
+	lodsw		; get the description pointer
+	mov	cx,ax
+	inc	ax
+	jz	@F	; if CX==-1, we're done
+
+	mov	ah,2	; write character
+	mov	dl,'	'
+	int	21h
+	mov	ah,9	; write DS:DX to stdout
+	mov	dx,cx	; get the pointer
+	int	21h
+	mov	ah,2	; write character
+	mov	dl,':'
+	int	21h
+	mov	ah,2	; write character
+	mov	dl,'	'
+	int	21h
+
+	lodsw		; get the bit index
+	btr	ax,0Fh	; check if opt-out and clear upper bit
+	sbb	dh,dh	; DH:=FFh if opt-out, 0 if opt-in
+	bt	bx,ax	; test the flag
+	sbb	dl,dl	; DL:=FFh if on, 0 if off
+	xor	dl,dh	; Invert DL for opt-out flags
+
+	; Now AND DL with a xor of the "off" symbol (-)
+	; and the "on" symbol (square root aka tick mark)
+	and	dl,'-' XOR 0FBh
+	; Then XOR it with the "off" symbol (-) to get
+	; correct character
+	xor	dl,'-'
+	mov	ah,2	; write character
+	int	21h
+
+	; Finally move to next line
+	mov	ah,9	; write DS:DX to stdout
+	lea	dx,newline
+	int	21h
+
+	; ZF will be cleared by the XOR above if we've written
+	; a line, so go back and check the next flag.
+	; If we've jumped from the beginning because there are
+	; no more flags, ZF will be set, so just return.
+	jnz	short @B
+@@:	ret
+status_report	endp
 
 ; File name for "MIDI" track data
 midi_file_name	db "AMBIENTS.DAT",0
@@ -5238,6 +5298,29 @@ win9xfound	db "Protected-Mode OS intercepts MSCDEX calls, this is gonna be fun!"
 savingvecs	db "Saving interrupt vectors...",0Dh,0Ah,"$"
 writingvecs	db "Installing new interrupt vectors...",0Dh,0Ah,"$"
 goingresident	db "Going resident. You can play Rayman now!",0Dh,0Ah,"$"
+statreport	db "TPLS TSR setting flags:"	; no dollar so we include the newline too
+newline		db 0Dh,0Ah,"$"
+
+; descriptions of flags in the status word
+ems_desc	db "Store payload in Expanded Memory (opt-in /E)","$"
+nofanf_desc	db "Exit sign and death use CD Audio (opt-out /N)","$"
+cdonly_desc	db "Play ambient 'MIDI' tracks (opt-out /C)","$"
+musonly_desc	db "Fix visual bugs as well as OST (opt-out /M)","$"
+colfist_desc	db "Bad Rayman's fist kills Rayman (opt-in /F)","$"
+win9x_desc	db "Running on Windows 95/98/Me (auto-detected)","$"
+
+align	2
+; Pairs of (pointer to description, bit index) describing
+; the flags of the statusword, plus (-1,-1) terminator
+; Bit Index ORed with 8000h to indicate opt-out
+status_descs:
+	dw	offset ems_desc,	STATBIT_EMS
+	dw	offset nofanf_desc,	STATBIT_NOFANF OR 8000h
+	dw	offset cdonly_desc,	STATBIT_NOAMB OR 8000h
+	dw	offset musonly_desc,	STATBIT_MUSONLY OR 8000h
+	dw	offset colfist_desc,	STATBIT_COLFIST
+	dw	offset win9x_desc,	STATBIT_WIN9X
+	dw	-1,			-1
 
 init	ends
 

@@ -354,9 +354,12 @@ STAT_EXTDRM	equ 1 SHL STATBIT_EXTDRM
 STAT_SPOOF	equ 1 SHL STATBIT_SPOOF
 STAT_IMMRET	equ 1 SHL STATBIT_IMMRET
 STAT_USVER	equ 1 SHL STATBIT_USVER
+; this combination of flags represents settings that can be
+; toggled by re-invoking the TSR:
+STAT_TOGGLEMASK	equ STAT_NOFANF OR STAT_NOAMB OR STAT_MUSONLY OR STAT_COLFIST
 ; this combination persists across Rayman runs since they were
-; specified or determined at the initial invocation of the TSR:
-STAT_PERSMASK	equ STAT_EMS OR STAT_NOFANF OR STAT_NOAMB OR STAT_MUSONLY OR STAT_WIN9X
+; specified or determined at invocation of the TSR:
+STAT_PERSMASK	equ STAT_EMS OR STAT_TOGGLEMASK OR STAT_WIN9X
 
 emshdl		dw 0
 pageframe	dw 0
@@ -2229,6 +2232,10 @@ tpls_int2f	proc
 	mov	ebx,'l'
 	mov	ecx,'u'
 	mov	edx,'M'
+
+	; Plus a pointer to our status word in SI:DI
+	mov	si,cs
+	lea	di,statusword
 	iret
 
 @@:
@@ -4921,23 +4928,6 @@ entry:
 	popf
 	.386
 
-	; Check if TPLS is already installed
-	mov	ax,0CE00h + 'T'
-	mov	bl,'P'
-	mov	cl,'L'
-	mov	dl,'S'
-	int	2Fh
-	cmp	al,'P'
-	jne	@F
-	cmp	bl,'l'
-	jne	@F
-	cmp	cl,'u'
-	jne	@F
-	cmp	dl,'M'
-	mov	dx,offset already
-	je	@@exitwitherr
-
-@@:
 	mov	bp,ds	; save PSP
 
 	mov	ax,stub
@@ -4948,7 +4938,7 @@ entry:
 	mov	si,81h	; command line in PSP
 	movzx	cx,byte ptr ds:[80h]
 	test	cx,cx
-	jz	@@getambientdat
+	jz	@@do_inst_check
 
 	cld
 @@:
@@ -4981,9 +4971,45 @@ entry:
 	or	byte ptr fs:[statusword],ah
 	loop	@B
 
-@@getambientdat:
+@@do_inst_check:
+	; Check if TPLS is already installed
+	mov	ax,0CE00h + 'T'
+	mov	bl,'P'
+	mov	cl,'L'
+	mov	dl,'S'
+	xor	si,si	; zero SI to check for pointer
+	int	2Fh
+	cmp	al,'P'
+	jne	@F
+	cmp	bl,'l'
+	jne	@F
+	cmp	cl,'u'
+	jne	@F
+	cmp	dl,'M'
+	jne	@F
+	; If TPLS is resident but we didn't get a valid pointer,
+	; assume it's an incompatible version and just fail
+	test	si,si
+	mov	dx,offset already
+	jz	@@exitwitherr
+
+	; Toggle switches in the resident status word as appropriate
+	mov	bx,fs:[statusword]
+	and	bx,STAT_TOGGLEMASK
+	mov	es,si		; load far pointer returned by int call
+	xor	es:[di],bx	; toggle the flags
+
+	push	cs
+	pop	ds
+	assume	ds:init
+	mov	bx,es:[di]	; load the altered flags for report
+	call	status_report
+	mov	ax,4C00h	; EXIT with success
+	int	21h
+
+@@:
 	; get_cur_exe will not work on DOS < 3.0
-	mov	ax,3000h; get DOS version
+	mov	ax,3000h	; get DOS version
 	int	21h
 	cmp	al,3
 	jae	@F
@@ -5294,16 +5320,16 @@ win9xfound	db "Protected-Mode OS intercepts MSCDEX calls, this is gonna be fun!"
 savingvecs	db "Saving interrupt vectors...",0Dh,0Ah,"$"
 writingvecs	db "Installing new interrupt vectors...",0Dh,0Ah,"$"
 goingresident	db "Going resident. You can play Rayman now!",0Dh,0Ah,"$"
-statreport	db "TPLS TSR setting flags:"	; no dollar so we include the newline too
+statreport	db "Settings flags (to toggle, rerun with the appropriate switches):"	; no dollar so we include the newline too
 newline		db 0Dh,0Ah,"$"
 
 ; descriptions of flags in the status word
-ems_desc	db "Store payload in Expanded Memory (opt-in /E)","$"
-nofanf_desc	db "Exit sign and death use CD Audio (opt-out /N)","$"
-cdonly_desc	db "Play ambient 'MIDI' tracks (opt-out /C)","$"
-musonly_desc	db "Fix visual bugs as well as OST (opt-out /M)","$"
-colfist_desc	db "Bad Rayman's fist kills Rayman (opt-in /F)","$"
-win9x_desc	db "Running on Windows 95/98/Me (auto-detected)","$"
+ems_desc	db "Store payload in Expanded Memory (/E to opt-IN)","$"
+nofanf_desc	db "'Yeah!' and death use CD Audio (/N to opt-OUT/toggle)","$"
+cdonly_desc	db "Play ambient 'MIDI' tracks (/C to opt-OUT/toggle)","$"
+musonly_desc	db "Fix visual bugs as well as OST (/M to opt-OUT/toggle)","$"
+colfist_desc	db "Bad Rayman's fist kills Rayman (/F to opt-IN/toggle)","$"
+win9x_desc	db "Running on Windows 95/98/Me (automatically detected)","$"
 
 align	2
 ; Pairs of (pointer to description, bit index) describing

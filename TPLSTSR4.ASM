@@ -839,6 +839,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA3],(524E5h-73D6Dh)	; @ 0x524E5 in the text section
 	mov	gs:[pDoAnimFrozen],(4B6A5h-73D6Dh)	; @ 0x4B6A5 in the text section
 	mov	gs:[pSuspence],(5ADE8h-73D6Dh)		; @ 0x5ADE8 in the text section
+	mov	gs:[pContinue],(5A7EAh-73D6Dh)		; @ 0x5A7EA in the text section
 	mov	gs:[pBRayThrowFist],(20B3Fh-73D6Dh)	; @ 0x20B3F in the text section
 	mov	gs:[pBRayCommand],(20908h-73D6Dh)	; @ 0x20908 in the text section
 	mov	gs:[padd_alwobj],(0F8E8h-73D6Dh)	; @ 0x0F8E8 in the text section
@@ -905,6 +906,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA3],(60505h-81D8Dh)	; @ 0x60505
 	mov	gs:[pDoAnimFrozen],(596C5h-81D8Dh)	; @ 0x596C5
 	mov	gs:[pSuspence],(68E08h-81D8Dh)		; @ 0x68E08
+	mov	gs:[pContinue],(6880Ah-81D8Dh)		; @ 0x6880A
 	mov	gs:[pBRayThrowFist],(2EB3Fh-81D8Dh)	; @ 0x2EB3F
 	mov	gs:[pBRayCommand],(2E908h-81D8Dh)	; @ 0x2E908
 	mov	gs:[padd_alwobj],(1D8E8h-81D8Dh)	; @ 0x1D8E8
@@ -973,6 +975,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA3],(604F5h-8169Dh)	; @ 0x604F5
 	mov	gs:[pDoAnimFrozen],(596B5h-8169Dh)	; @ 0x596B5
 	mov	gs:[pSuspence],(684ACh-8169Dh)		; @ 0x684AC
+	mov	gs:[pContinue],(67EAEh-8169Dh)		; @ 0x67EAE
 	mov	gs:[pBRayThrowFist],(2EB3Fh-8169Dh)	; @ 0x2EB3F
 	mov	gs:[pBRayCommand],(2E908h-8169Dh)	; @ 0x2E908
 	mov	gs:[padd_alwobj],(1D8E8h-8169Dh)	; @ 0x1D8E8
@@ -1041,6 +1044,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA3],(604E5h-821FFh)	; @ 0x604E5
 	mov	gs:[pDoAnimFrozen],(596A5h-821FFh)	; @ 0x596A5
 	mov	gs:[pSuspence],(68DE8h-821FFh)		; @ 0x68DE8
+	mov	gs:[pContinue],(687EAh-821FFh)		; @ 0x687EA
 	mov	gs:[pBRayThrowFist],(2EA8Fh-821FFh)	; @ 0x2EA8F
 	mov	gs:[pBRayCommand],(2E858h-821FFh)	; @ 0x2E858
 	mov	gs:[padd_alwobj],(1D878h-821FFh)	; @ 0x1D878
@@ -1110,6 +1114,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA3],(609D5h-81EB9h)	; @ 0x609D5
 	mov	gs:[pDoAnimFrozen],(59B95h-81EB9h)	; @ 0x59B95
 	mov	gs:[pSuspence],(68A5Ch-81EB9h)		; @ 0x68A5C
+	mov	gs:[pContinue],(6845Eh-81EB9h)		; @ 0x6845E
 	mov	gs:[pBRayThrowFist],(2EA7Fh-81EB9h)	; @ 0x2EA7F
 	mov	gs:[pBRayCommand],(2E848h-81EB9h)	; @ 0x2E848
 	mov	gs:[padd_alwobj],(1D868h-81EB9h)	; @ 0x1D868
@@ -1184,6 +1189,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pDoAnimFrozen],(596A5h-821FFh)	; @ 0x596A5
 	; new ones:
 	mov	gs:[pSuspence],(68DE8h-821FFh)		; @ 0x68DE8
+	mov	gs:[pContinue],(687EAh-821FFh)		; @ 0x687EA
 	mov	gs:[pBRayThrowFist],(2EA8Fh-821FFh)	; @ 0x2EA8F
 	mov	gs:[pBRayCommand],(2E858h-821FFh)	; @ 0x2E858
 	mov	gs:[padd_alwobj],(1D878h-821FFh)	; @ 0x1D878
@@ -1259,6 +1265,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pDoAnimFrozen],(596A5h-821FFh)	; @ 0x596B5
 	; new ones:
 	mov	gs:[pSuspence],(68DF8h-8220Fh)		; @ 0x68DF8
+	mov	gs:[pContinue],(687FAh-8220Fh)		; @ 0x687FA
 	mov	gs:[pBRayThrowFist],(2EA8Fh-8220Fh)	; @ 0x2EA8F
 	mov	gs:[pBRayCommand],(2E858h-8220Fh)	; @ 0x2E858
 	mov	gs:[padd_alwobj],(1D878h-8220Fh)	; @ 0x1D878
@@ -1334,6 +1341,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA3],(60055h-81CA8h)	; @ 0x60055
 	mov	gs:[pDoAnimFrozen],(59215h-81CA8h)	; @ 0x59215
 	mov	gs:[pSuspence],(68928h-81CA8h)		; @ 0x68928
+	mov	gs:[pContinue],(6832Ah-81CA8h)		; @ 0x6832A
 	mov	gs:[pBRayThrowFist],(2E80Fh-81CA8h)	; @ 0x2E80F
 	mov	gs:[pBRayCommand],(2E5D8h-81CA8h)	; @ 0x2E5D8
 	mov	gs:[padd_alwobj],(1D604h-81CA8h)	; @ 0x1D604
@@ -1402,6 +1410,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA3],(5FEC5h-81216h)	; @ 0x5FEC5
 	mov	gs:[pDoAnimFrozen],(59085h-81216h)	; @ 0x59085
 	mov	gs:[pSuspence],(6878Ch-81216h)		; @ 0x6878C
+	mov	gs:[pContinue],(6818Eh-81216h)		; @ 0x6818E
 	mov	gs:[pBRayThrowFist],(2E6EFh-81216h)	; @ 0x2E6EF
 	mov	gs:[pBRayCommand],(2E4B8h-81216h)	; @ 0x2E4B8
 	mov	gs:[padd_alwobj],(1D4D4h-81216h)	; @ 0x1D4D4
@@ -1469,6 +1478,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA3],(5F8B5h-81508h)	; @ 0x5F8B5
 	mov	gs:[pDoAnimFrozen],(58A75h-81508h)	; @ 0x58A75
 	mov	gs:[pSuspence],(68188h-81508h)		; @ 0x68188
+	mov	gs:[pContinue],(67B8Ah-81508h)		; @ 0x67B8A
 	mov	gs:[pBRayThrowFist],(2E80Fh-81508h)	; @ 0x2E80F
 	mov	gs:[pBRayCommand],(2E5D8h-81508h)	; @ 0x2E5D8
 	mov	gs:[padd_alwobj],(1D604h-81508h)	; @ 0x1D604
@@ -1539,6 +1549,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA3],(5F865h-81678h)	; @ 0x5F865
 	mov	gs:[pDoAnimFrozen],(58A25h-81678h)	; @ 0x58A25
 	mov	gs:[pSuspence],(68138h-81678h)		; @ 0x68138
+	mov	gs:[pContinue],(67B3Ah-81678h)		; @ 0x67B3A
 	mov	gs:[pBRayThrowFist],(2E80Fh-81678h)	; @ 0x2E80F
 	mov	gs:[pBRayCommand],(2E5D8h-81678h)	; @ 0x2E5D8
 	mov	gs:[padd_alwobj],(1D634h-81678h)	; @ 0x1D634
@@ -1613,6 +1624,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	gs:[pExitSignEOA3],(5F725h-81548h)	; @ 0x5F725
 	mov	gs:[pDoAnimFrozen],(58A61h-81548h)	; @ 0x58A61
 	mov	gs:[pSuspence],(68150h-81548h)		; @ 0x68150
+	mov	gs:[pContinue],(67B52h-81548h)		; @ 0x67B52
 	mov	gs:[pBRayThrowFist],(2EC7Fh-81548h)	; @ 0x2EC7F
 	mov	gs:[pBRayCommand],(2EA48h-81548h)	; @ 0x2EA48
 	mov	gs:[padd_alwobj],(1D3D4h-81548h)	; @ 0x1D3D4
@@ -2839,6 +2851,9 @@ setup_hooks	proc near	uses ecx edx
 	; (but other versions normally do)
 	mov	edx,[pSuspence]
 	call	set_hookpoint
+	mov	edx,[pContinue]
+	call	set_hookpoint
+
 	bt	gs:[statusword],STATBIT_NOFANF
 	jc	@F	; none of these are needed if fanfare disabled
 	mov	edx,[pExitSign1]
@@ -3443,6 +3458,7 @@ pExitSignEOA2	dd ?	;; We need it to believe the answer is "NO" at least until ou
 pExitSignEOA3	dd ?	;; audio is finished playing!
 pDoAnimFrozen	dd ?	; Call to "DO_ANIM" on Rayman while game is otherwise frozen on exit sign
 pSuspence	dd ?	; Call to null sub from "INIT_VIGNET", which should start Suspense music
+pContinue	dd ?	; Call to null sub from "MAIN_CONTINUE_PRG", which should start Continue music
 pBRayThrowFist	dd ?	; Bad Rayman's fist is being made active (if not already)
 pBRayCommand	dd ?	; Bad Rayman's command code (runs every frame)
 padd_alwobj	dd ?	; Function in Rayman's code to add an "always" object to the active table
@@ -3973,6 +3989,8 @@ hook_handler	proc
 	je	@@snif_dead
 	cmp	eax,[pSuspence]
 	je	@@start_cd_suspence
+	cmp	eax,[pContinue]
+	je	@@start_cd_continue
 
 	cmp	eax,[pExitSignEOA1]
 	je	@@eoa_check
@@ -4414,8 +4432,14 @@ hook_handler	proc
 	call	stop_ambient_track
 	jmp	@@retpoint
 
+; Rayman has opted to use a Continue - cheer up the music!
+@@start_cd_continue:
+	mov	eax,51	; Once More
+	jmp	short @F
 ; "Mister Dark kidnaps Betilla" vignette is being shown - play the "Suspense" music
 @@start_cd_suspence:
+	mov	eax,32	; Suspense
+@@:
 	call	music_active
 	jz	@@retpoint		; don't play if Music is turned off
 
@@ -4425,7 +4449,6 @@ hook_handler	proc
 	; (this calls MSCDEX so the hookpoint will reset)
 	pushad
 	mov	edi,[pPlayTrack]
-	mov	eax,32	; Suspense
 	call	call_code_in_rayman
 	popad
 	; Also stop any ambient that's playing

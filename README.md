@@ -64,7 +64,7 @@ These are all existing Rayman versions of which I am aware, and the TSR has been
 `TPLSTSR4.EXE` supports the following command line switches on invocation:
 
 |Switch |Meaning |Effect |
---- |--- | --- | ---
+--- |--- | --- 
 |/E |[EMS](https://en.wikipedia.org/wiki/Expanded_memory#EMS) |The TSR stores the payload in Expanded Memory rather than Conventional Memory, while waiting for you to run _Rayman_. This seemed like a good idea when I first wrote this version, but when I actually tried it out it was a bit flaky… Maybe someday I'll go back to figure out what I did wrong, and fix it. (PRs also welcome!) |
 |/N |NO "Yeah!" or "Oh No!" music |Turns off the option to use CD audio when Rayman reaches the exit sign or dies. |
 |/C |CD Audio only |Turns off Ambient ("MIDI") tracks. |

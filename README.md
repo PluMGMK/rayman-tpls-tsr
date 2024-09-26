@@ -46,7 +46,7 @@ These are all existing Rayman versions of which I am aware, and the TSR has been
 * Download and extract a release from the [releases page](https://github.com/PluMGMK/rayman-tpls-tsr/releases).
 * Change the `IMGMOUNT` command in the `autoexec` section of your config file to mount the `TPLSTSR4.cue` file, rather than the game's original CD image.
 * Before the invocation of `RAYMAN.EXE` in the `autoexec` section, add `D:\TPLSTSR4.EXE` (where `D` is your CD drive letter).
- * You can add command-line switches as described below, if desired.
+  * You can add command-line switches as described below, if desired.
 * Run Dosbox with your new config file and enjoy TPLS!
 
 ### If on native DOS or Windows 3.x / 9x (having used Ubi Soft's installer to install _Rayman_)
@@ -56,7 +56,7 @@ These are all existing Rayman versions of which I am aware, and the TSR has been
 * Use the `tplstsr4.cue` (or `tplstsr4.toc`) and `tplstsr4.bin` files to burn a CD-R – it should be possible to do this with `cdrdao` on Linux (**using the `--swap` option!**), or perhaps [ImgBurn](https://www.imgburn.com/) on Windows.
 * Insert the new CD into your PC running DOS or Windows.
 * Before running Rayman, run `D:\TPLSTSR4.EXE` (where `D` is your CD drive letter).
- * You can add command-line switches as described below, if desired.
+  * You can add command-line switches as described below, if desired.
 * Run `C:\RAYMAN.BAT` and enjoy TPLS!
 
 ### Command-line switches

@@ -45,6 +45,10 @@ These are all existing Rayman versions of which I am aware, and the TSR has been
 * Make sure your Rayman version is supported (see above table) – if not, please let me know and I'll see what I can do!
 * Download and extract a release from the [releases page](https://github.com/PluMGMK/rayman-tpls-tsr/releases).
 * Change the `IMGMOUNT` command in the `autoexec` section of your config file to mount the `TPLSTSR4.cue` file, rather than the game's original CD image.
+  * If you're using the config file from the GOG version of _Rayman Forever_ then it's a bit more complicated:
+  * Cut the `imgmount` command under the initial `@echo off` and paste it under the `:designer` and `:fans` labels.
+  * Paste it under the `:rayman` label as well, and change this one to point to `TPLSTSR4.cue`
+  * This is because the TPLS CD image only supports running the original game, not _Designer_ or _by his Fans_ (maybe this will change in a future version…)
 * Before the invocation of `RAYMAN.EXE` in the `autoexec` section, add `D:\TPLSTSR4.EXE` (where `D` is your CD drive letter).
   * You can add command-line switches as described below, if desired.
 * Run Dosbox with your new config file and enjoy TPLS!

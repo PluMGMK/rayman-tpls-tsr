@@ -3186,7 +3186,7 @@ play_ambient_track	proc near	uses es
 	mov	[esp]._SOS_START_SAMPLE.dwSampleSize,edx
 
 	; Make it loop
-	mov	[esp]._SOS_START_SAMPLE.wSampleFlags, _STAGE_LOOP+_LOOPING
+	mov	[esp]._SOS_START_SAMPLE.wSampleFlags, _STAGE_LOOP+_LOOPING+_TRANSLATE16TO8
 	; Loop the full thing, from the beginning!
 	mov	[esp]._SOS_START_SAMPLE.dwSampleLoopLength,edx
 	mov	[esp]._SOS_START_SAMPLE.dwSampleLoopPoint,eax

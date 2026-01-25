@@ -2312,7 +2312,7 @@ tpls_int2f	proc
 	jne	@@passthrough
 
 	call	chk_music_redirect
-	jmp	cs:old_int2f
+	jmp	short @@passthrough
 
 @@mscdex_noredir:
 	; Redirects not active, time to check if we should activate them

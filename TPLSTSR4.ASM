@@ -408,6 +408,25 @@ notenoughaudiotracks_letter db ?,": hasn't enough audio tracks, not using.",33o,
 unkver		db 33o,"[35m","Unknown Rayman version. Not proceeding with payload injection...",33o,"[37m",13,10,"$"
 payload_fail	db 33o,"[35m","Payload injection failed - could not read valid driver spec from config file,",13,10
 		db "or could not find the driver in HMIDRV.386, or could not create TPLSDRV.386",33o,"[37m",13,10,"$"
+raycfg_failopen	db 33o,"[35m","Couldn't open RAYMAN.CFG to check sound driver ID",33o,"[37m",13,10,"$"
+raycfg_failseek	db 33o,"[35m","Couldn't locate sound driver ID in RAYMAN.CFG",33o,"[37m",13,10,"$"
+raycfg_failread	db 33o,"[35m","Couldn't read sound driver ID from RAYMAN.CFG",33o,"[37m",13,10,"$"
+hmidrv_failopen	db 33o,"[35m","Couldn't open HMIDRV.386",33o,"[37m",13,10,"$"
+hmidrv_failhdr	db 33o,"[35m","Couldn't read header from HMIDRV.386",33o,"[37m",13,10,"$"
+hmidrv_faildrvh	db 33o,"[35m","Couldn't read driver header from HMIDRV.386",33o,"[37m",13,10,"$"
+hmidrv_faildrv	db 33o,"[35m","Couldn't read driver code from HMIDRV.386",33o,"[37m",13,10,"$"
+hmidrv_failseek	db 33o,"[35m","Couldn't seek to next driver header in HMIDRV.386",33o,"[37m",13,10,"$"
+drvnotfound	db 33o,"[35m","Couldn't find driver with ID "
+sos_devid_text	db 4 dup (?)	; to fill in at runtime if we need to display this message
+		db "h in HMIDRV.386",33o,"[37m",13,10,"$"
+fakehmi_failc	db 33o,"[35m","Couldn't create TPLSDRV.386",33o,"[37m",13,10,"$"
+fakehmi_failw	db 33o,"[35m","Couldn't write to TPLSDRV.386",33o,"[37m",13,10,"$"
+advice		db 33o,"[35m","Please ensure the following:",13,10
+		db " * You are running RAYMAN.EXE from the directory in which it's installed",13,10
+		db " * You have write access to the directory",13,10
+		db " * Rayman is installed correctly (not corrupted)",13,10
+		db " * Rayman's sound is configured correctly",13,10
+		db 13,10,33o,"[37m",13,10,"$"
 
 ; Rayman version strings
 ray121us	db "RAYMAN (US) v1.21"
@@ -1651,6 +1670,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	dx,offset raycfg
 	pushf
 	call	old_int21
+	mov	dx,offset raycfg_failopen
 	jc	@@failed
 	mov	bx,ax
 
@@ -1659,6 +1679,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	dx,11h		; DeviceID in config file
 	pushf
 	call	old_int21
+	mov	dx,offset raycfg_failseek
 	jc	@@failed_fileopen
 
 	mov	ah,3Fh		; READ
@@ -1666,6 +1687,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	dx,offset sos_devid
 	pushf
 	call	old_int21
+	mov	dx,offset raycfg_failread
 	jc	@@failed_fileopen
 
 	mov	ah,3Eh		; CLOSE
@@ -1678,6 +1700,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	dx,offset hmidrv
 	pushf
 	call	old_int21
+	mov	dx,offset hmidrv_failopen
 	jc	@@failed
 	mov	bx,ax
 
@@ -1686,6 +1709,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	dx,offset hmidrv_hdr
 	pushf
 	call	old_int21
+	mov	dx,offset hmidrv_failhdr
 	jc	@@failed_fileopen
 
 @@drvhdr_loop:
@@ -1694,6 +1718,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	dx,offset hmidrv_drvhdr
 	pushf
 	call	old_int21
+	mov	dx,offset hmidrv_faildrvh
 	jc	@@failed_fileopen
 
 	mov	edi,[sos_devid]
@@ -1709,10 +1734,47 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	dx,word ptr [hmidrv_drvhdr.wSize]
 	pushf
 	call	old_int21
+	mov	dx,offset hmidrv_failseek
 	jc	@@failed_fileopen
 
 	dec	[hmidrv_hdr.wDrivers]
 	jnz	@@drvhdr_loop
+
+	; need to write the device ID to indicate that we failed to find
+	mov	eax,[sos_devid]
+	mov	dx,ax
+
+	and	al,0Fh
+	cmp	al,0Ah
+	jb	@F
+	add	al,'A'-'0'-0Ah
+@@:	add	al,'0'
+	mov	sos_devid_text[3],al
+
+	mov	al,dl
+	shr	al,4
+	cmp	al,0Ah
+	jb	@F
+	add	al,'A'-'0'-0Ah
+@@:	add	al,'0'
+	mov	sos_devid_text[2],al
+
+	and	ah,0Fh
+	cmp	ah,0Ah
+	jb	@F
+	add	ah,'A'-'0'-0Ah
+@@:	add	ah,'0'
+	mov	sos_devid_text[1],ah
+
+	mov	ah,dh
+	shr	ah,4
+	cmp	ah,0Ah
+	jb	@F
+	add	ah,'A'-'0'-0Ah
+@@:	add	ah,'0'
+	mov	sos_devid_text[0],ah
+
+	mov	dx,offset drvnotfound
 	jmp	@@failed_fileopen
 
 @@found_driver:
@@ -1725,6 +1787,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	dx,offset fakehmidrv
 	pushf
 	call	old_int21
+	mov	dx,offset fakehmi_failc
 	jc	@@failed_fileopen
 	mov	si,ax
 
@@ -1736,6 +1799,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	[hmidrv_hdr.wDrivers],1
 	pushf
 	call	old_int21
+	mov	dx,offset fakehmi_failw
 	jc	@@failed_twofilesopen
 
 	mov	ah,40h		; WRITE
@@ -1745,6 +1809,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	add	[hmidrv_drvhdr.wSize],offset end_of_payload
 	pushf
 	call	old_int21
+	mov	dx,offset fakehmi_failw
 	jc	@@failed_twofilesopen
 
 	push	ds
@@ -1758,6 +1823,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	call	old_int21
 	pop	ds
 	assume	ds:stub
+	mov	dx,offset fakehmi_failw
 	jc	@@failed_twofilesopen
 
 	mov	cx,di
@@ -1775,13 +1841,16 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	dx,offset hmidrv_buffer
 	pushf
 	call	old_int21
+	mov	dx,offset hmidrv_faildrv
 	jc	@@failed_twofilesopen
 
 	xchg	bx,si		; fake file again!
 	mov	cx,ax
 	mov	ah,40h		; WRITE
+	mov	dx,offset hmidrv_buffer
 	pushf
 	call	old_int21
+	mov	dx,offset fakehmi_failw
 	jc	@@failed_twofilesopen
 
 	mov	cx,BUFSIZE
@@ -1819,7 +1888,10 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	call	old_int21
 @@failed:
 	mov	ah,9
-	mov	dx,offset payload_fail
+	pushf
+	call	old_int21
+	mov	ah,9
+	mov	dx,offset advice
 	pushf
 	call	old_int21
 	; unset any DRM redirections we may have set:

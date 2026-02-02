@@ -63,6 +63,15 @@ These are all existing Rayman versions of which I am aware, and the TSR has been
   * You can add command-line switches as described below, if desired.
 * Run `C:\RAYMAN.BAT` and enjoy TPLS!
 
+### If using ZuluIDE hardware or Daemon Tools with native DOS / Windows
+
+* Make sure your Rayman version is supported (see above table) – if not, please let me know and I'll see what I can do!
+* Download and extract a release from the [releases page](https://github.com/PluMGMK/rayman-tpls-tsr/releases).
+* Mount the `tplszulu.cue` file rather than `tplstsr4.cue`, because ZuluIDE and Daemon Tools seem to have trouble with pre-gaps in CUE files.
+* Before running Rayman, run `D:\TPLSTSR4.EXE` (where `D` is your mounted CD drive letter).
+  * You can add command-line switches as described below, if desired.
+* Run `C:\RAYMAN.BAT` and enjoy TPLS!
+
 ### Command-line switches
 
 `TPLSTSR4.EXE` supports the following command line switches on invocation:

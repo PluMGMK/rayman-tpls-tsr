@@ -323,10 +323,6 @@ old_int2f	label dword
 old_int2f_off	dw ?
 old_int2f_seg	dw ?
 
-callback2payload label dword
-callback_off	dw ?
-callback_seg	dw ?
-
 ; file headers for copying between original and spoofed HMIDRV files
 hmidrv_hdr	_SOS_DRV_FILEHEADER <{?}>
 hmidrv_drvhdr	_SOS_DRV_DRIVERHEADER <{?}>
@@ -351,7 +347,6 @@ STATBIT_USVER	equ 10	; US Rayman version running
 STATBIT_HMIRED	equ 11	; HMIDRV.386 redirect active
 STATBIT_DRMRED	equ 12	; Other file redirects active (for DRM)
 STATBIT_ACTIVE	equ 13	; Payload active
-STATBIT_RUNCB	equ 14	; Hookpoints dirty so we need to run RM callback
 STATBIT_QCBUG	equ 15	; Dosbox Q-Channel bug detected, need to intercept calls
 ; literal constants that can be ORed together:
 STAT_EMS	equ 1 SHL STATBIT_EMS
@@ -362,7 +357,6 @@ STAT_COLFIST	equ 1 SHL STATBIT_COLFIST
 STAT_HMIRED	equ 1 SHL STATBIT_HMIRED
 STAT_DRMRED	equ 1 SHL STATBIT_DRMRED
 STAT_ACTIVE	equ 1 SHL STATBIT_ACTIVE
-STAT_RUNCB	equ 1 SHL STATBIT_RUNCB
 STAT_EMSSAV	equ 1 SHL STATBIT_EMSSAV
 STAT_WIN9X	equ 1 SHL STATBIT_WIN9X
 STAT_EXTDRM	equ 1 SHL STATBIT_EXTDRM
@@ -2399,18 +2393,8 @@ tpls_int2f	proc
 	cmp	ah,15h	; MSCDEX call?
 	jne	@@uncond_passthrough
 	bt	cs:[statusword],STATBIT_ACTIVE
-	jnc	@F
+	jc	@@passthrough
 
-	btr	cs:[statusword],STATBIT_RUNCB
-	jnc	@@passthrough
-	bt	cs:[statusword],STATBIT_WIN9X
-	jc	@@passthrough		; but test for it just in case...
-	
-	; the payload sets this when it activates
-	jmp	cs:callback2payload
-	; and the callback itself will send us to old_int2f when it's done
-
-@@:
 	; We don't have a PM companion, need to handle everything in RM
 	bt	cs:[statusword],STATBIT_HMIRED
 	jnc	@@mscdex_noredir
@@ -2573,25 +2557,18 @@ payload	segment use32
 	mov	edx,offset hook_handler
 	int	21h
 
-	; On Win9x, we don't allocate an RM callback, but just let the int 31h handler call the payload directly
-	bt	gs:[statusword],STATBIT_WIN9X
-	jc	@F
+	mov	ax,3531h; get interrupt vector
+	int	21h
+	mov	ds,[esp]
+	mov	[payload_old_int31_off],ebx
+	mov	[payload_old_int31_seg],es
 
-	mov	ax,303h	; allocate RM callback
-	mov	esi,offset callback_fromstub
-	pop	es	; get saved DS from stack
-	mov	edi,offset callback_RMCS
-	int	31h
-	mov	gs:[callback_off],dx
-	mov	gs:[callback_seg],cx
+	mov	ax,2531h; set interrupt vector
+	push	cs
+	pop	ds
+	mov	edx,offset payload_int31
+	int	21h
 
-	push	es	; restore DS on stack to what it was
-	jmp	@@callback_done
-
-@@:
-	mov	gs:[payload_cs],cs
-
-@@callback_done:
 	pop	ds
 	pop	es
 
@@ -2686,6 +2663,24 @@ payload	segment use32
 	; FS should be OK, since RealDrv_CS isn't zero
 	; (i.e. setup_selectors has been called)
 	call	cs:lpRealDrv	; let the driver uninit itself
+
+	; unhook interrupts
+	push	ds
+	push	edx
+	push	eax
+
+	mov	ax,2531h; set interrupt vector
+	lds	edx,cs:payload_old_int31
+	int	21h
+
+	mov	ax,25F5h; set interrupt vector
+	lds	edx,cs:old_intF5
+	int	21h
+
+	pop	eax
+	pop	edx
+	pop	ds
+
 	call	free_selectors
 
 @@:
@@ -3661,11 +3656,13 @@ rayman_cs	dw ?	; Rayman's code segment
 rayman_cs_asds	dw 0	; Rayman's code segment as a data segment, for poking!
 rayman_ds	dw ?
 
+align	4
+payload_old_int31	label fword
+payload_old_int31_off	dd ?
+payload_old_int31_seg	dw ?
+
 FANFARE_MAXFRAMES	equ 480 ; Allow up to 480 frames of frozen Rayman during the fanfare (same as PS1 version)
 fanfare_countdown	dw ?	; Frames left before we force the fanfare to terminate
-
-align	4
-callback_RMCS	rmcall <?>
 
 old_intF5	label fword
 old_intF5_off	dd ?
@@ -3776,28 +3773,32 @@ stubseg_error	db 33o,"[35m","Error setting up selector.",13,10
 
 assume	ds:nothing,es:nothing,fs:nothing,gs:nothing
 
-callback_fromstub proc
-	; Reactivate all hookpoints.
-	; NB: Because this happens here, we need to make sure int 2Fh
-	; never gets called from within the hookpoint handler!
-	mov	ds,cs:[mydatasel]
-	assume	ds:payload
+payload_int31	proc
+	cmp	ax,300h	; simulate Real Mode interrupt
+	jne	@@go_old
+	cmp	bl,2Fh
+	jne	@@go_old
+	cmp	byte ptr es:[edi+1].rmcall._eax,15h	; MSCDEX call?
+	jne	@@go_old
 
+	; Reactivate last-triggered hookpoint if Rayman makes an MSCDEX call.
+	; NB: Because this happens here, we need to make sure such calls
+	; are never triggered from within the hookpoint handler!
+	push	ecx
 	xor	ecx,ecx
 	dec	cx
-	xchg	cx,[cur_trig_hook]
-	cmp	cx,-1
+	cmp	cx,cs:[cur_trig_hook]
 	je	@F
-	call	hook_activate
-@@:
-	call	get_stub_seg
-	assume	gs:stub
-	; send it back to the int 2F handler
-	mov	eax,gs:[old_int2f]
-	mov	dword ptr es:[edi.rmcall._ip],eax
-	iretd
-	assume	ds:nothing,gs:nothing
-callback_fromstub endp
+
+	push	ds
+	mov	ds,cs:[mydatasel]
+	call	update_curtrig_hookpoint
+	pop	ds
+@@:	pop	ecx
+
+@@go_old:
+	jmp	payload_old_int31
+payload_int31	endp
 
 ; bool music_active();
 ; ZF clear if Music is turned on in the game, set if turned off
@@ -3957,12 +3958,24 @@ clear_hookpoint	proc near	uses ds
 	assume	ds:nothing
 clear_hookpoint	endp
 
-; void __fastcall change_music(char newtrack);
-; Changes the music track (and corresponding length) for the current level and plays
-change_music	proc near
+; int update_curtrig_hookpoint@<ecx>(int newidx@<ecx>)
+update_curtrig_hookpoint	proc near
 	assume	ds:payload	; always called from inside the hook handler...
 	; Also, without this assume line, the assembler generates crashing code!
 
+	; update the currently-triggered hook, return previous one
+	xchg	cx,[cur_trig_hook]
+	cmp	cx,-1
+	je	@F
+	; if there's another pending, reactivate it
+	; by using the macro "debug_bell_saveregs", I have found this happens quite often!
+	call	hook_activate
+@@:	ret
+update_curtrig_hookpoint	endp
+
+; void __fastcall change_music(char newtrack);
+; Changes the music track (and corresponding length) for the current level and plays
+change_music	proc near
 	push	edx
 	push	ecx
 	push	ebx
@@ -4071,22 +4084,12 @@ hook_handler	proc
 	mov	eax,[ebp]		; the return addx
 	call	hook_find
 	call	hook_deactivate
+	call	update_curtrig_hookpoint
 
-	; update the currently-triggered hook
-	xchg	cx,[cur_trig_hook]
-	cmp	cx,-1
-	je	@F
-	; if there's another pending, reactivate it
-	; by using the macro "debug_bell_saveregs", I have found this happens quite often!
-	call	hook_activate
-@@:
-
-	; we'll want the hookpoint reactivated on the next MSCDEX call
+	; get the status word into CX
 	push	gs
 	call	get_stub_seg
 	assume	gs:stub
-	bts	gs:[statusword],STATBIT_RUNCB
-	; while we're here, get the status word into CX
 	mov	cx,gs:[statusword]
 	pop	gs
 	assume	gs:nothing
@@ -4758,11 +4761,6 @@ old_int31	label fword
 old_int31_off	dd ?
 old_int31_seg	dw ?
 
-; Allow Protected Mode stub code to call into the payload
-callback_pm	label fword
-		dd offset callback_fromstub
-payload_cs	dw ?
-
 raydetect	db 33o,"[35mRayman EXE detected, tracing instructions until DPMI entry...",0Dh,0Ah
 		db "(Apologies if you're attempting to single-step with a debugger!)",33o,"[37m",0Dh,0Ah,'$'
 intercept	db 33o,"[35mProtected Mode entry intercepted!",33o,"[37m",0Dh,0Ah,'$'
@@ -4999,22 +4997,6 @@ tpls_int31	proc
 	assume	ds:stub
 	pop	edi
 
-	bt	ds:[statusword],STATBIT_ACTIVE	; payload active?
-	jnc	@F
-
-	btr	ds:[statusword],STATBIT_RUNCB	; need to run the callback?
-	jnc	@@done
-
-	pushad
-	pushfd
-	; the payload sets the code segment for this when it activates
-	call	callback_pm
-	assume	ds:payload
-	popad
-	jmp	@@done
-
-@@:
-	assume	ds:stub
 	push	ax
 	push	bx
 	push	cx

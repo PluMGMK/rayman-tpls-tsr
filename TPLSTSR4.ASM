@@ -84,6 +84,20 @@ AudioTrackInfo	struc
 	ctrl_info	db ?
 AudioTrackInfo	ends
 
+QChanInfo	struc
+	function	db ?
+	ctl_ADR		db ?
+	track_number	db ?	; should be BCD
+	track_point	db ?
+	track_minute	db ?
+	track_second	db ?
+	track_frame	db ?
+	_resd		db ?	; zero
+	abs_minute	db ?
+	abs_second	db ?
+	abs_frame	db ?
+QChanInfo	ends
+
 _SOS_DRV_FILEHEADER struc
 	szName          db 32 dup(?)
 	wDrivers        dd ?
@@ -338,6 +352,7 @@ STATBIT_HMIRED	equ 11	; HMIDRV.386 redirect active
 STATBIT_DRMRED	equ 12	; Other file redirects active (for DRM)
 STATBIT_ACTIVE	equ 13	; Payload active
 STATBIT_RUNCB	equ 14	; Hookpoints dirty so we need to run RM callback
+STATBIT_QCBUG	equ 15	; Dosbox Q-Channel bug detected, need to intercept calls
 ; literal constants that can be ORed together:
 STAT_EMS	equ 1 SHL STATBIT_EMS
 STAT_NOFANF	equ 1 SHL STATBIT_NOFANF
@@ -708,6 +723,64 @@ chk_music_redirect proc near	uses eax
 @@retpoint:
 	ret
 chk_music_redirect endp
+
+; Check if a PlayReq in ES:BX is pointing at the beginning of the logo track.
+; If so, go play that music AND ALSO check the Q-Channel info immediately
+; after starting. On DOSBox(-X) builds prior to mid-2024, this will incorrectly
+; report the track-relative head position as two seconds instead of zero.
+; If we find this, we set a status bit to intercept all further queries of
+; Q-Channel Info...
+chk_qchannel_bug proc near
+	push	eax
+	mov	eax,es:[bx.PlayReq.dwStart]
+	cmp	eax,[logotrack_start]
+	pop	eax
+
+	je	@F
+	; set CF to indicate caller should pass through the PlayReq
+	stc
+	ret
+
+@@:	; call through to start the playback
+	call	do_int2f
+
+	; now get the Q-Channel info
+	push	es
+	push	bx
+
+	sub	sp,((size IOCTLRW) + 1) AND (NOT 1)
+	mov	bx,sp
+	push	ss
+	pop	es		; ES:BX --> buffer on stack
+	assume	es:nothing
+
+	push	bp
+	sub	sp,((size QChanInfo) + 1) AND (NOT 1)
+	mov	bp,sp
+
+	mov	es:[bx.IOCTLRW.bLen],size IOCTLRW
+	mov	es:[bx.IOCTLRW.bUnit],0
+	mov	es:[bx.IOCTLRW.bCmd],3		; IOCTL read
+	mov	es:[bx.IOCTLRW.wBufSeg],ss
+	mov	es:[bx.IOCTLRW.wBufOff],bp	; another stack buffer
+	mov	es:[bx.IOCTLRW.wCount],size QChanInfo
+	mov	[bp.QChanInfo.function],0Ch	; Q-Channel info
+
+	call	do_int2f
+	cmp	[bp.QChanInfo.track_second],2	; two seconds ahead?
+	jb	@F
+	bts	[statusword],STATBIT_QCBUG	; if so, we have the bug!
+
+@@:	add	sp,((size QChanInfo) + 1) AND (NOT 1)
+	pop	bp
+	add	sp,((size IOCTLRW) + 1) AND (NOT 1)
+	pop	bx
+	pop	es
+
+	; clear CF to tell caller we've already processed the PlayReq
+	clc
+	ret
+chk_qchannel_bug endp
 
 setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	call	get_payload_seg
@@ -2384,7 +2457,11 @@ tpls_int2f	proc
 	jne	@@passthrough
 
 	call	chk_music_redirect
-	jmp	short @@passthrough
+	call	chk_qchannel_bug
+	jc	@@passthrough
+	; if chk_qchannel_bug cleared CF, it means it's already started
+	; the audio playback, so we just return
+	jmp	@@return_success
 
 @@mscdex_noredir:
 	; Redirects not active, time to check if we should activate them

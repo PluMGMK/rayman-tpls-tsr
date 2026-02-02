@@ -20,3 +20,4 @@ done
 
 rm "./CD/01. Data Track.cue" # there's no way of telling poweriso we don't want this
 binmerge --outdir . "./CD/TPLSTSR4.cue" "TPLSTSR4"
+sed '/INDEX 00/d' TPLSTSR4.cue > TPLSZULU.cue

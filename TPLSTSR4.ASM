@@ -2393,8 +2393,45 @@ tpls_int2f	proc
 	cmp	ah,15h	; MSCDEX call?
 	jne	@@uncond_passthrough
 	bt	cs:[statusword],STATBIT_ACTIVE
-	jc	@@passthrough
+	jnc	@@payload_inactive
 
+	; if payload is active, we may still need to check the Q-Channel bug
+	bt	cs:[statusword],STATBIT_QCBUG
+	jnc	@@passthrough
+
+	; basic checks on whether or not it's a Q-Channel info query
+	cmp	al,10h			; device driver request?
+	jne	@@passthrough
+	cmp	es:[bx.IOCTLRW.bCmd],3	; IOCTL INPUT
+	jne	@@passthrough
+	cmp	es:[bx.IOCTLRW.wCount],size QChanInfo
+	jne	@@passthrough
+
+	push	fs
+	push	si
+	lfs	si,dword ptr es:[bx.IOCTLRW.wBufOff]
+	cmp	byte ptr fs:[si],0Ch	; Q-Channel info
+	je	@F
+	pop	si
+	pop	fs
+	jmp	@@passthrough
+
+@@:	; Call MSCDEX to process the Q-Channel query
+	call	do_int2f
+
+	; Now modify the output
+	sub	fs:[si.QChanInfo.track_second],2
+	jnb	@F
+	; fixup borrow...
+	dec	fs:[si.QChanInfo.track_minute]
+	add	fs:[si.QChanInfo.track_second],60
+
+@@:	pop	si
+	pop	fs
+	; request has already been processed, so IRET directly
+	jmp	@@return_success
+
+@@payload_inactive:
 	; We don't have a PM companion, need to handle everything in RM
 	bt	cs:[statusword],STATBIT_HMIRED
 	jnc	@@mscdex_noredir

@@ -5293,18 +5293,32 @@ entry:
 	lea	si,midi_file_name
 	rep	movs byte ptr es:[di],cs:[si]
 
-	; put the env seg back in ES so we can free it
+	; put the env seg on the stack so we can free it in a minute
 	push	ds
-	pop	es
 	push	cs
 	pop	ds
-	assume	ds:init
+	push	cs
+	pop	es
+	assume	ds:init,es:init
 
 	mov	dx,offset intro
 	mov	ah,9	; write to stdout
 	int	21h
+	mov	bp,offset plums
+	mov	ah,3	; GET CURSOR POSITION AND SIZE
+	xor	bh,bh	; page 0
+	int 	10h
+	; now DX is the cursor position, as required for write string
+	mov	ax,1303h; WRITE STRING, update cursor, alternating chars/attrs
+	mov	cx,6	; string length
+	xor	bh,bh	; page 0
+	int	10h
+	mov	dx,offset intro2
+	mov	ah,9	; write to stdout
+	int	21h
 
 	; free environment to save Conventional Memory
+	pop	es	; env seg on stack
 	mov	ah,49h	; free memory
 	int	21h
 	jnc	@F
@@ -5541,7 +5555,9 @@ size_midi_fn	equ $-midi_file_name
 messages:
 no386		db "Looks like you're trying to run this on an 80(2)86. Aborting...",0Dh,0Ah,"$"
 already		db "TPLS already resident. Aborting. You can just play Rayman.",0Dh,0Ah,"$"
-intro		db "Welcome to ","P",33o,"[95ml","u",33o,"[95mM","'",33o,"[95ms"," TPLS TSR!",0Dh,0Ah,"$"
+intro		db "Welcome to ","$"
+plums		db "P",05h,"l",0Dh,"u",05h,"M",0Dh,"'",05h,"s",0Dh	; alternating purple (05h) and pink (0Dh)
+intro2		db " TPLS TSR!",0Dh,0Ah,"$"
 emswarn		db "WARNING: EMS support seems to 'work' while you're playing Rayman BUT (on my PC)",0Dh,0Ah
 		db "it seems to make DOS act weird (e.g. multiple files with same name...). YMMV.",0Dh,0Ah
 		db "To be safe, it might be best to restart your PC / VM and rerun without /E...",0Dh,0Ah,"$"

@@ -347,6 +347,7 @@ STATBIT_USVER	equ 10	; US Rayman version running
 STATBIT_HMIRED	equ 11	; HMIDRV.386 redirect active
 STATBIT_DRMRED	equ 12	; Other file redirects active (for DRM)
 STATBIT_ACTIVE	equ 13	; Payload active
+STATBIT_REDFAIL	equ 14	; Redirecting intro/conclu.dat file open has failed
 STATBIT_QCBUG	equ 15	; Dosbox Q-Channel bug detected, need to intercept calls
 ; literal constants that can be ORed together:
 STAT_EMS	equ 1 SHL STATBIT_EMS
@@ -436,6 +437,10 @@ advice		db "Please ensure the following:",13,10
 		db " * Rayman is installed correctly (not corrupted)",13,10
 		db " * Rayman's sound is configured correctly",13,10
 		db 13,10,13,10,"$"
+redfail_advice	db "No, this isn't a bug, it's yet another sneaky DRM in the game!",13,10
+		db "To progress beyond this level, you will need to copy the 'INTRO.DAT' and",13,10
+		db "'CONCLU.DAT' files, from your original Rayman CD, to the current folder.",13,10
+		db "(Basically you need to do an 'install with video'.)",13,10,"$"
 
 ; Rayman version strings
 ray121us	db "RAYMAN (US) v1.21"
@@ -2309,7 +2314,10 @@ tpls_int21	proc
 	add	dx,10		; "X:\rayman\" is 10 characters
 	pushf
 	call	cs:old_int21
-	pop	dx
+	jnc	@F
+	; set this flag so we can notify user why the game exited
+	bts	cs:[statusword],STATBIT_REDFAIL
+@@:	pop	dx
 
 @@return_setc:
 	pop	di
@@ -2327,7 +2335,7 @@ tpls_int21	proc
 @@exit:
 	; Reset everything when Rayman exits
 	test	cs:[statusword],not STAT_PERSMASK
-	jz	@F
+	jz	@@exit_passthrough
 
 	push	ds
 	push	ax
@@ -2337,7 +2345,14 @@ tpls_int21	proc
 	pop	ds
 	assume	ds:stub
 
-	; Non-persistent bits reset for a new run.
+	; Alert the user if they've fallen foul of Allegro Presto DRM.
+	bt	[statusword],STATBIT_REDFAIL
+	jnc	@F
+
+	mov	dx,offset redfail_advice
+	call	write_purple_message
+
+@@:	; Non-persistent bits reset for a new run.
 	and	[statusword],STAT_PERSMASK
 	; Reset this too, to make sure we go through whatever rigmarole
 	; is needed if another version is launched in the same session!
@@ -2352,7 +2367,7 @@ tpls_int21	proc
 	pop	ax
 	pop	ds
 	assume	ds:nothing
-@@:
+@@exit_passthrough:
 	jmp	cs:old_int21
 tpls_int21	endp
 

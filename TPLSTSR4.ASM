@@ -397,45 +397,45 @@ fake_exes	db "NUL",0	; can always be opened!
 rayman_banner	db 'R',1Eh,'A',1Eh,'Y',1Eh,'M',1Eh,'A',1Eh,'N',1Eh
 
 ; Warning / error messages
-emserr		db 33o,"[35m","EMS error occurred. Unable to proceed with payload injection...",33o,"[37m",13,10,"$"
-noextratracks	db 33o,"[35m","Warning: CD in drive "
+emserr		db "EMS error occurred. Unable to proceed with payload injection...",13,10,"$"
+noextratracks	db "Warning: CD in drive "
 noextratracks_letter db ?,": does not have intro/outtro tracks.",13,10
-		db "Intro and/or outtro cutscenes may be silent!",33o,"[37m",13,10,"$"
-wrongvolumelabel db 33o,"[35m","CD in drive "
+		db "Intro and/or outtro cutscenes may be silent!",13,10,"$"
+wrongvolumelabel db "CD in drive "
 wrongvolumelabel_letter db ?,": does not have volume label 'RAYMAN', not using.",13,10
 		db "Note that this only matters for Rayman v1.00 and v1.10, so you can rectify this",13,10
 		db "by playing a newer version, or by using the latest TPLS CD image (which should",13,10
-		db "be correctly labelled).",33o,"[37m",13,10,"$"
-badbioschecksums db 33o,"[35m","Your BIOS and/or Video BIOS checksum(s) do not match what is in RAY1.WLD,",13,10
+		db "be correctly labelled).",13,10,"$"
+badbioschecksums db "Your BIOS and/or Video BIOS checksum(s) do not match what is in RAY1.WLD,",13,10
 		db "which means that the game will think it is being played on a different",13,10
 		db "machine to the one it was originally installed on, and not work properly!",13,10
-		db "To fix this, cd into the PCMAP folder and run FIXWLDS.EXE (comes with the TSR).",33o,"[37m",13,10,"$"
-toomanydatatracks db 33o,"[35m","CD in drive "
-toomanydatatracks_letter db ?,": has too many data tracks, not using.",33o,"[37m",13,10,"$"
-notenoughaudiotracks db 33o,"[35m","CD in drive "
-notenoughaudiotracks_letter db ?,": hasn't enough audio tracks, not using.",33o,"[37m",13,10,"$"
-unkver		db 33o,"[35m","Unknown Rayman version. Not proceeding with payload injection...",33o,"[37m",13,10,"$"
-payload_fail	db 33o,"[35m","Payload injection failed - could not read valid driver spec from config file,",13,10
-		db "or could not find the driver in HMIDRV.386, or could not create TPLSDRV.386",33o,"[37m",13,10,"$"
-raycfg_failopen	db 33o,"[35m","Couldn't open RAYMAN.CFG to check sound driver ID",33o,"[37m",13,10,"$"
-raycfg_failseek	db 33o,"[35m","Couldn't locate sound driver ID in RAYMAN.CFG",33o,"[37m",13,10,"$"
-raycfg_failread	db 33o,"[35m","Couldn't read sound driver ID from RAYMAN.CFG",33o,"[37m",13,10,"$"
-hmidrv_failopen	db 33o,"[35m","Couldn't open HMIDRV.386",33o,"[37m",13,10,"$"
-hmidrv_failhdr	db 33o,"[35m","Couldn't read header from HMIDRV.386",33o,"[37m",13,10,"$"
-hmidrv_faildrvh	db 33o,"[35m","Couldn't read driver header from HMIDRV.386",33o,"[37m",13,10,"$"
-hmidrv_faildrv	db 33o,"[35m","Couldn't read driver code from HMIDRV.386",33o,"[37m",13,10,"$"
-hmidrv_failseek	db 33o,"[35m","Couldn't seek to next driver header in HMIDRV.386",33o,"[37m",13,10,"$"
-drvnotfound	db 33o,"[35m","Couldn't find driver with ID "
+		db "To fix this, cd into the PCMAP folder and run FIXWLDS.EXE (comes with the TSR).",13,10,"$"
+toomanydatatracks db "CD in drive "
+toomanydatatracks_letter db ?,": has too many data tracks, not using.",13,10,"$"
+notenoughaudiotracks db "CD in drive "
+notenoughaudiotracks_letter db ?,": hasn't enough audio tracks, not using.",13,10,"$"
+unkver		db "Unknown Rayman version. Not proceeding with payload injection...",13,10,"$"
+payload_fail	db "Payload injection failed - could not read valid driver spec from config file,",13,10
+		db "or could not find the driver in HMIDRV.386, or could not create TPLSDRV.386",13,10,"$"
+raycfg_failopen	db "Couldn't open RAYMAN.CFG to check sound driver ID",13,10,"$"
+raycfg_failseek	db "Couldn't locate sound driver ID in RAYMAN.CFG",13,10,"$"
+raycfg_failread	db "Couldn't read sound driver ID from RAYMAN.CFG",13,10,"$"
+hmidrv_failopen	db "Couldn't open HMIDRV.386",13,10,"$"
+hmidrv_failhdr	db "Couldn't read header from HMIDRV.386",13,10,"$"
+hmidrv_faildrvh	db "Couldn't read driver header from HMIDRV.386",13,10,"$"
+hmidrv_faildrv	db "Couldn't read driver code from HMIDRV.386",13,10,"$"
+hmidrv_failseek	db "Couldn't seek to next driver header in HMIDRV.386",13,10,"$"
+drvnotfound	db "Couldn't find driver with ID "
 sos_devid_text	db 4 dup (?)	; to fill in at runtime if we need to display this message
-		db "h in HMIDRV.386",33o,"[37m",13,10,"$"
-fakehmi_failc	db 33o,"[35m","Couldn't create TPLSDRV.386",33o,"[37m",13,10,"$"
-fakehmi_failw	db 33o,"[35m","Couldn't write to TPLSDRV.386",33o,"[37m",13,10,"$"
-advice		db 33o,"[35m","Please ensure the following:",13,10
+		db "h in HMIDRV.386",13,10,"$"
+fakehmi_failc	db "Couldn't create TPLSDRV.386",13,10,"$"
+fakehmi_failw	db "Couldn't write to TPLSDRV.386",13,10,"$"
+advice		db "Please ensure the following:",13,10
 		db " * You are running RAYMAN.EXE from the directory in which it's installed",13,10
 		db " * You have write access to the directory",13,10
 		db " * Rayman is installed correctly (not corrupted)",13,10
 		db " * Rayman's sound is configured correctly",13,10
-		db 13,10,33o,"[37m",13,10,"$"
+		db 13,10,13,10,"$"
 
 ; Rayman version strings
 ray121us	db "RAYMAN (US) v1.21"
@@ -859,9 +859,7 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 
 	mov	dx,offset unkver
 @@earlyfail:
-	mov	ah,9	; write to stdout
-	pushf
-	call	old_int21
+	call	write_purple_message
 
 	stc
 	jmp	@@retpoint
@@ -1954,13 +1952,9 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	pushf
 	call	old_int21
 @@failed:
-	mov	ah,9
-	pushf
-	call	old_int21
-	mov	ah,9
+	call	write_purple_message
 	mov	dx,offset advice
-	pushf
-	call	old_int21
+	call	write_purple_message
 	; unset any DRM redirections we may have set:
 	btr	[statusword],STATBIT_DRMRED
 	stc
@@ -2021,9 +2015,7 @@ chk_suitablecd	proc near	uses ds ax cx es bx dx
 	mov	[noextratracks_letter],dl
 	sub	[noextratracks_letter],20h	; make uppercase!
 	mov	dx,offset noextratracks
-	mov	ah,9	; write to stdout
-	pushf
-	call	old_int21
+	call	write_purple_message
 
 @@:
 	bt	[statusword],STATBIT_EXTDRM	; extra DRM?
@@ -2068,9 +2060,7 @@ chk_suitablecd	proc near	uses ds ax cx es bx dx
 	sub	[notenoughaudiotracks_letter],20h; make uppercase!
 	mov	dx,offset notenoughaudiotracks
 @@:
-	mov	ah,9	; write to stdout
-	pushf
-	call	old_int21
+	call	write_purple_message
 	stc
 	jmp	@@cleanupstack
 
@@ -2539,6 +2529,47 @@ tpls_int2f	proc
 	pop	bp
 	iret
 tpls_int2f	endp
+
+; Write dollar-terminated string @ DS:DX to the screen in purple colour.
+; ANSI.SYS not required.
+write_purple_message	proc far
+	push	es
+	pushf
+	pusha
+
+	; string needs to be in ES
+	push	ds
+	pop	es
+
+	; first determine its length by searching for the terminator
+	cld
+	mov	al,'$'
+	xor	cx,cx
+	dec	cx
+	mov	di,dx
+	repne	scasb
+	; now DI points just beyond the dollar
+	dec	di	; point at the dollar
+	sub	di,dx	; subtract beginning to get length
+
+	; write string requires string pointer in ES:BP rather than DS:DX
+	mov	bp,dx
+	; need to tell it where to write - do so at the cursor position
+	mov	ah,3	; GET CURSOR POSITION AND SIZE
+	xor	bh,bh	; page 0
+	int 	10h
+	; now DX is the cursor position, as required for write string
+
+	mov	ax,1301h; WRITE STRING, update cursor
+	mov	cx,di	; string length
+	mov	bx,005h	; page 0, attribute 5 = black bg, purple fg
+	int	10h
+
+	popa
+	popf
+	pop	es
+	ret
+write_purple_message	endp
 stubdos	ends
 
 ; Protected-Mode code, injected into the sound driver at the first possible opportunity
@@ -3803,10 +3834,10 @@ midi_cur_track	dd -1	; Which "MIDI" track is currently playing
 midi_file_path	db 80 dup (?)
 
 ; Error messages
-outofselectors	db 33o,"[35m","Error setting up selector(s).",13,10
-		db "Payload cannot init real sound driver.",33o,"[37m",13,10,"$"
-stubseg_error	db 33o,"[35m","Error setting up selector.",13,10
-		db "Payload cannot communicate with Real-Mode stub.",33o,"[37m",13,10,"$"
+outofselectors	db "TPLS-triggered abort: Error setting up selector(s).",13,10
+		db "TPLS payload cannot init real sound driver.",13,10,"$"
+stubseg_error	db "TPLS-triggered abort: Error setting up selector.",13,10
+		db "TPLS payload cannot communicate with Real-Mode stub.",13,10,"$"
 
 assume	ds:nothing,es:nothing,fs:nothing,gs:nothing
 
@@ -4798,9 +4829,9 @@ old_int31	label fword
 old_int31_off	dd ?
 old_int31_seg	dw ?
 
-raydetect	db 33o,"[35mRayman EXE detected, tracing instructions until DPMI entry...",0Dh,0Ah
-		db "(Apologies if you're attempting to single-step with a debugger!)",33o,"[37m",0Dh,0Ah,'$'
-intercept	db 33o,"[35mProtected Mode entry intercepted!",33o,"[37m",0Dh,0Ah,'$'
+raydetect	db "Rayman EXE detected, tracing instructions until DPMI entry...",0Dh,0Ah
+		db "(Apologies if you're attempting to single-step with a debugger!)",0Dh,0Ah,'$'
+intercept	db "Protected Mode entry intercepted!",0Dh,0Ah,'$'
 
 openredir_9x	proc near
 	; Are we opening the current EXE?
@@ -4841,8 +4872,7 @@ openredir_9x	proc near
 	mov	ax,cs
 	mov	ds,ax
 	mov	dx,offset raydetect
-	mov	ah,9	; write to stdout
-	int	21h
+	call	write_purple_message
 	pop	dx
 	pop	ds
 
@@ -4929,8 +4959,7 @@ tpls_dbhandler	proc
 	mov	ax,cs
 	mov	ds,ax
 	mov	dx,offset intercept
-	mov	ah,9	; write to stdout
-	int	21h
+	call	write_purple_message
 
 	pop	dx
 	pop	ds
@@ -5497,10 +5526,10 @@ size_midi_fn	equ $-midi_file_name
 messages:
 no386		db "Looks like you're trying to run this on an 80(2)86. Aborting...",0Dh,0Ah,"$"
 already		db "TPLS already resident. Aborting. You can just play Rayman.",0Dh,0Ah,"$"
-intro		db "Welcome to ",33o,"[35mP",33o,"[95ml",33o,"[35mu",33o,"[95mM",33o,"[35m'",33o,"[95ms",33o,"[37m TPLS TSR!",0Dh,0Ah,"$"
-emswarn		db 33o,"[31mWARNING: EMS support seems to 'work' while you're playing Rayman BUT (on my PC)",0Dh,0Ah
+intro		db "Welcome to ","P",33o,"[95ml","u",33o,"[95mM","'",33o,"[95ms"," TPLS TSR!",0Dh,0Ah,"$"
+emswarn		db "WARNING: EMS support seems to 'work' while you're playing Rayman BUT (on my PC)",0Dh,0Ah
 		db "it seems to make DOS act weird (e.g. multiple files with same name...). YMMV.",0Dh,0Ah
-		db "To be safe, it might be best to restart your PC / VM and rerun without /E...",33o,"[37m",0Dh,0Ah,"$"
+		db "To be safe, it might be best to restart your PC / VM and rerun without /E...",0Dh,0Ah,"$"
 noems		db "/E specified but EMS not reported present and correct, aborting...",0Dh,0Ah,"$"
 nopageframe	db "/E specified but EMS has no page frame - this is not supported.",0Dh,0Ah,"$"
 emsallocerr	db "/E specified but unable to allocate EMS page, aborting...",0Dh,0Ah,"$"

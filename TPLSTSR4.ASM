@@ -5163,7 +5163,8 @@ entry:
 	popf
 	.386
 
-	mov	bp,ds	; save PSP
+	push	ds	; save PSP
+	pop	gs
 
 	mov	ax,stub
 	mov	fs,ax
@@ -5249,7 +5250,7 @@ entry:
 	cmp	al,3
 	jae	@F
 
-	mov     es,ds:[2Ch]     ; get env segment
+	mov     es,gs:[2Ch]     ; get env segment
 	mov	di,-1	; indicate to following code that we don't have a path
 	jmp	@@have_exe
 
@@ -5385,7 +5386,7 @@ entry:
 	mov	fs:[first_cddrv],cl
 	mov	fs:[endof_cddrv],bl
 
-	mov	bx,bp		; get PSP
+	mov	bx,gs		; get PSP
 	mov	bp,dummy_hook	; dummy hook marks end of resident code
 	bt	fs:[statusword],STATBIT_WIN9X
 	jc	@F

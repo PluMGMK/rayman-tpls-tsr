@@ -11,4 +11,4 @@ jwasm -mz FIXWLDS.ASM
 # Now create the ISO
 # Set the abstract, biblio and copyright, even though (for now) the TSR spoofs them anyway
 # Use level 1 to ensure maximal compatibility with DOS!
-mkisofs -v -abstract RAYMAN -biblio RAYMAN -copyright RAYMAN -V RAYMAN -iso-level 1 -o TPLSTSR4.ISO {TPLSTSR4,FIXWLDS}.{ASM,EXE} AMBIENTS.DAT LICENSE README.md *.sh *.py
+mkisofs -v -abstract RAYMAN -biblio RAYMAN -copyright RAYMAN -V RAYMAN -iso-level 1 -o TPLSTSR4.ISO {TPLSTSR4,FIXWLDS}.{ASM,EXE} AMBIENTS.DAT LICENSE README.md mk*.sh burncd.sh *.py

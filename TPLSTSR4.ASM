@@ -5181,6 +5181,7 @@ entry:
 	lodsb
 	cmp	al,'/'
 	loopne	@B
+	jne	@@do_inst_check
 
 	; we have a switch...
 	lodsb

@@ -444,6 +444,7 @@ redfail_advice	db "No, this isn't a bug, it's yet another sneaky DRM in the game
 
 ; Rayman version strings
 ray121us	db "RAYMAN (US) v1.21"
+ray121es	db "RAYMAN (ES) v1.21"	; fan translation
 ray121fr	db "RAYMAN (FR) v1.21"
 ray121ch	db "RAYMAN (CH) v1.21"
 ray120jp	db "RAYMAN (JP) v1.20"
@@ -810,6 +811,12 @@ setup_payload	proc near	uses gs ds dx es edi eax cx bx si
 	mov	di,offset ray121us
 	mov	cx,sizeof ray121us
 	call	chk_entete
+	jc	@@setup_ptrs_v121us
+
+	mov	di,offset ray121es
+	mov	cx,sizeof ray121es
+	call	chk_entete
+	; this is a hex-edit of v121us, so same offset table applies
 	jc	@@setup_ptrs_v121us
 
 	mov	di,offset ray121fr
